@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, Platform, SafeAreaView, ScrollView } from 'react-native'
+import TrackEvents from '@/src/components/events/events'
 
 function formatMoney(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -58,7 +59,10 @@ export default function TrackDetail() {
           <Text style={styles.pageTitle}>{track.name}</Text>
           <Text style={styles.pageSubtitle}>
             {track.rating.toFixed(1)}★
-            <Text style={styles.pageSubtitleMuted}> (precise {track.rating.toFixed(2)}★)</Text>
+            <Text style={styles.pageSubtitleMuted}>
+              {' '}
+              (precise {track.rating.toFixed(2)}★) {'\t\t'} Track Capacity: {track.trackSize} racers
+            </Text>
           </Text>
         </View>
 
@@ -101,6 +105,8 @@ export default function TrackDetail() {
           quote={quotes?.entertainment}
           onUpgrade={() => upgradeEntertainmentByMode(track.id, mode)}
         />
+
+        <TrackEvents track={track} />
       </ScrollView>
     </SafeAreaView>
   )

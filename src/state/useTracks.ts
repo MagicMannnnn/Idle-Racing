@@ -32,6 +32,8 @@ export type Track = {
   entertainmentLevel: number // 1..100
   entertainment: number // 0..100
   maxEntertainment: number // 0..100
+
+  trackSize: number
 }
 
 type UpgradeQuote =
@@ -100,24 +102,23 @@ type TracksState = {
 // TUNING (easy to tweak)
 // =====================================================
 
-/** Track purchase costs: 100, 10,000, 1,000,000... */
 function trackCostForIndex(index: number) {
-  return Math.round(100 * Math.pow(100, index))
+  return Math.round(100 * Math.pow(10, index))
 }
 
 /** Tier multiplier so later tracks are pricier */
 function tierMult(index: number) {
   // tweak to make later tracks scale harder/softer
-  return 1 + index * 0.75
+  return 1 + Math.pow(index, 1.4)
 }
 
 // ------- Stat ranges by index (tweak these) -------
 
 function capacityBaseForIndex(index: number) {
-  return 10 + index * 10
+  return 10 + index * 100
 }
 function capacityMaxForIndex(index: number) {
-  return 250 + index * 250
+  return 250 + index * 250 * 10
 }
 
 function safetyBaseForIndex(index: number) {
@@ -328,6 +329,7 @@ function makeTrack(index: number, name: string): Track {
     entertainmentLevel: 1,
     entertainment: 0,
     maxEntertainment: 0,
+    trackSize: (index + 1) * 10,
   }
 
   return recomputeTrack(base)
@@ -510,6 +512,7 @@ export const useTracks = create<TracksState>()(
             entertainmentLevel,
             entertainment: 0,
             maxEntertainment: 0,
+            trackSize: (index + 1) * 10,
           }
 
           return recomputeTrack(base)
