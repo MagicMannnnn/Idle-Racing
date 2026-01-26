@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
 type OnboardingState = {
+  hasHydrated?: boolean
   completed: boolean
   stage: number
   setStage: (stage: number) => void
@@ -13,6 +14,7 @@ type OnboardingState = {
 export const useOnboarding = create<OnboardingState>()(
   persist(
     (set) => ({
+      hasHydrated: false,
       completed: false,
       stage: 0,
 
@@ -23,6 +25,10 @@ export const useOnboarding = create<OnboardingState>()(
     {
       name: 'idle.onboarding.v1',
       storage: createJSONStorage(() => AsyncStorage),
+      onRehydrateStorage: () => (state, error) => {
+        useOnboarding.setState({ hasHydrated: true })
+      },
+
       version: 1,
     },
   ),

@@ -1,8 +1,9 @@
 import Money from '@/src/components/money/MoneyHeader'
+import { useOnboarding } from '@/src/state/useOnboarding'
 import { useTracks } from '@/src/state/useTracks'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useMemo, useState } from 'react'
+import React, { use, useMemo, useState } from 'react'
 import {
   FlatList,
   Pressable,
@@ -36,6 +37,8 @@ export default function TracksIndex() {
   const tracks = useTracks((s) => s.tracks)
   const nextCost = useTracks((s) => s.nextTrackCost())
   const buyNextTrack = useTracks((s) => s.buyNextTrack)
+  const completed = useOnboarding((s) => s.completed)
+  const setStage = useOnboarding((s) => s.setStage)
 
   const [buyOpen, setBuyOpen] = useState(false)
   const [trackName, setTrackName] = useState('')
@@ -53,7 +56,7 @@ export default function TracksIndex() {
 
   const onOpenBuy = () => {
     setError(null)
-    setTrackName(`Track ${tracks.length + 1}`)
+    setTrackName('')
     setBuyOpen(true)
   }
 
@@ -63,7 +66,7 @@ export default function TracksIndex() {
   }
 
   const onConfirmBuy = () => {
-    const res = buyNextTrack(trackName)
+    const res = buyNextTrack(trackName || 'Castle Corner')
     if (!res.ok) {
       setError('Not enough money.')
       return
@@ -72,6 +75,10 @@ export default function TracksIndex() {
     setError(null)
     // optional: jump straight into new track
     // router.push(`/home/track/${res.track.id}`)
+
+    if (!completed) {
+      setStage(1)
+    }
   }
 
   return (
@@ -159,7 +166,6 @@ export default function TracksIndex() {
         <Pressable style={styles.modalBackdrop} onPress={onCancelBuy}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Buy Track</Text>
-            <Text style={styles.modalSubtitle}>Cost: 🪙 {formatMoney(nextCost)}</Text>
 
             <Text style={styles.modalLabel}>Track name</Text>
             <TextInput
@@ -168,7 +174,7 @@ export default function TracksIndex() {
                 setTrackName(v)
                 setError(null)
               }}
-              placeholder="e.g. Silverstone"
+              placeholder="e.g. Castle Corner"
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.input}
               autoCapitalize="words"
