@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/material-top-tabs": "^7.4.13",
     "expo": "~54.0.32",
     "expo-router": "~6.0.22",
@@ -24,7 +25,8 @@
     "react-native-pager-view": "6.9.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-tab-view": "^4.2.2"
+    "react-native-tab-view": "^4.2.2",
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
