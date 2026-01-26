@@ -209,7 +209,7 @@ function entertainmentFor(index: number, level: number) {
 }
 
 function computeRatingPrecise(t: Track) {
-  const capN = clamp01((t.capacity - 10) / 500_000)
+  const capN = clamp01((t.capacity - 10) / t.maxCapacity)
   const safN = clamp01((t.safety - 1) / 5)
   const entN = clamp01((t.entertainment - 5) / 100)
 

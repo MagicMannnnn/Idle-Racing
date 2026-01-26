@@ -1,3 +1,4 @@
+import { useMoney } from '@/src/state/useMoney'
 import { useTracks, type UpgradeMode } from '@/src/state/useTracks'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -13,6 +14,7 @@ function formatMoney(n: number) {
 export default function TrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const track = useTracks((s) => s.tracks.find((t) => t.id === id))
+  const money = useMoney((s) => s.money)
 
   const quoteCapacityUpgrade = useTracks((s) => s.quoteCapacityUpgrade)
   const quoteSafetyUpgrade = useTracks((s) => s.quoteSafetyUpgrade)
@@ -31,7 +33,7 @@ export default function TrackDetail() {
       safety: quoteSafetyUpgrade(track.id, mode),
       entertainment: quoteEntertainmentUpgrade(track.id, mode),
     }
-  }, [track?.id, mode, quoteCapacityUpgrade, quoteSafetyUpgrade, quoteEntertainmentUpgrade])
+  }, [track?.id, mode, quoteCapacityUpgrade, quoteSafetyUpgrade, quoteEntertainmentUpgrade, money])
 
   if (!track) {
     return (
@@ -136,8 +138,12 @@ function UpgradeCard(props: {
   const cost = quote?.ok ? quote.cost : 0
 
   // disable if: no quote, maxed, can't afford, or 0 levels (MAX but no funds)
-  const affordable = !!quote?.ok && quote.affordable === true && levels > 0
-  const disabled = !quote || maxed || !affordable
+  const affordable = React.useMemo(() => {
+    return !!quote?.ok && quote.affordable === true && levels > 0
+  }, [quote, levels])
+  const disabled = React.useMemo(() => {
+    return !quote || maxed || !affordable
+  }, [quote, maxed, affordable])
 
   const leftTitle = maxed ? 'Max' : `Buy ${levels}`
   const leftSub = maxed
