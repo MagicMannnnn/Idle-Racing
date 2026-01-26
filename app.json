@@ -2,6 +2,7 @@
   "expo": {
     "name": "idle-racing",
     "slug": "idle-racing",
+    "scheme": "idleracing",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +22,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff",
-        "bundleIdentifier": "com.gterry.idleracing",
+        "package": "com.gterry.idleracing",
         "buildNumber": "1"
       },
       "edgeToEdgeEnabled": true,
@@ -29,6 +30,7 @@
     },
     "web": {
       "favicon": "./assets/icon.png"
-    }
+    },
+    "plugins": ["expo-router"]
   }
 }
