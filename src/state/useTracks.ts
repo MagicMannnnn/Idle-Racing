@@ -17,9 +17,9 @@ type TracksState = {
   // economy
   nextTrackCost: () => number
   canBuyNextTrack: () => boolean
-  buyNextTrack: () =>
-    | { ok: true; track: Track; cost: number }
-    | { ok: false; reason: 'not_enough_money' }
+  buyNextTrack: (
+    name: string,
+  ) => { ok: true; track: Track; cost: number } | { ok: false; reason: 'not_enough_money' }
 
   // upgrades
   upgradeCapacity: (
@@ -70,13 +70,14 @@ export const useTracks = create<TracksState>()(
         return useMoney.getState().canAfford(cost)
       },
 
-      buyNextTrack: () => {
+      buyNextTrack: (name: string) => {
         const cost = get().nextTrackCost()
         const ok = useMoney.getState().spend(cost)
         if (!ok) return { ok: false as const, reason: 'not_enough_money' }
 
         const index = get().tracks.length
         const track = makeTrack(index)
+        track.name = name
 
         set((s) => ({ tracks: [...s.tracks, track] }))
         return { ok: true as const, track, cost }
