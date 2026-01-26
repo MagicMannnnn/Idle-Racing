@@ -1,11 +1,15 @@
-import Ionicons from '@expo/vector-icons/build/Ionicons'
+import { Ionicons } from '@expo/vector-icons'
 import { Tabs, router } from 'expo-router'
 import { Pressable, Text } from 'react-native'
 
 function SettingsButton() {
   return (
-    <Pressable onPress={() => router.push('/settings')} hitSlop={10}>
-      <Ionicons name="settings-outline" size={22} style={{ marginLeft: 15 }} />
+    <Pressable
+      onPress={() => router.push('/settings')}
+      hitSlop={10}
+      style={{ marginLeft: 16, marginBottom: 6 }}
+    >
+      <Ionicons name="settings-outline" size={22} />
     </Pressable>
   )
 }
@@ -15,13 +19,15 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerLeft: () => <SettingsButton />,
+        headerLeftContainerStyle: { paddingLeft: 0 },
         tabBarActiveTintColor: '#000000',
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
           title: 'Home',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
