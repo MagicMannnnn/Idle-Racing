@@ -121,17 +121,17 @@ function capacityMaxForIndex(index: number) {
 }
 
 function safetyBaseForIndex(index: number) {
-  return 1.0 + index * 0.05
+  return 1.0 + index * 0.1
 }
 function safetyMaxForIndex(index: number) {
-  return 2.0 + index * 0.15
+  return 2.0 + index * 0.5
 }
 
 function entertainmentBaseForIndex(index: number) {
   return 5 + index * 2 // %
 }
 function entertainmentMaxForIndex(index: number) {
-  return 60 + index * 5 // %
+  return 35 + index * 5 // %
 }
 
 // ------- Non-linear per-level cost functions (3 functions, tweak these) -------
@@ -209,9 +209,9 @@ function entertainmentFor(index: number, level: number) {
 }
 
 function computeRatingPrecise(t: Track) {
-  const capN = clamp01(t.capacity / t.maxCapacity)
-  const safN = clamp01(t.safety / t.maxSafety)
-  const entN = clamp01(t.entertainment / t.maxEntertainment)
+  const capN = clamp01((t.capacity - 10) / 500_000)
+  const safN = clamp01((t.safety - 1) / 5)
+  const entN = clamp01((t.entertainment - 5) / 100)
 
   // weights (tweak)
   const score = capN * 0.45 + safN * 0.3 + entN * 0.25 // 0..1
@@ -241,12 +241,67 @@ function quoteUpgrade(
 ): UpgradeQuote {
   if (from >= MAX_LEVEL) return { ok: false as const, reason: 'already_max' }
 
-  const to = clamp(from + modeToLevels(from, mode), MIN_LEVEL, MAX_LEVEL)
+  const canAfford = (cost: number) => useMoney.getState().canAfford(cost)
+
+  // x1 / x10 = direct
+  if (mode === 'x1' || mode === 'x10') {
+    const target = clamp(from + (mode === 'x1' ? 1 : 10), MIN_LEVEL, MAX_LEVEL)
+    const levels = target - from
+    const cost = costFn(index, from, target)
+    return {
+      ok: true as const,
+      fromLevel: from,
+      toLevel: target,
+      levels,
+      cost,
+      affordable: canAfford(cost),
+    }
+  }
+
+  // MAX = max affordable levels (binary search)
+  // Find highest "toLevel" such that cost(from -> toLevel) <= money
+  const money = useMoney.getState().money
+
+  let lo = from + 1
+  let hi = MAX_LEVEL
+  let best = from
+
+  // Quick bail: if can't afford even +1
+  const cost1 = costFn(index, from, from + 1)
+  if (!canAfford(cost1)) {
+    return {
+      ok: true as const,
+      fromLevel: from,
+      toLevel: from,
+      levels: 0,
+      cost: 0,
+      affordable: false,
+    }
+  }
+
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2)
+    const cost = costFn(index, from, mid)
+    if (cost <= money) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+
+  const to = clamp(best, from, MAX_LEVEL)
   const levels = to - from
   const cost = costFn(index, from, to)
-  const affordable = useMoney.getState().canAfford(cost)
 
-  return { ok: true as const, fromLevel: from, toLevel: to, levels, cost, affordable }
+  return {
+    ok: true as const,
+    fromLevel: from,
+    toLevel: to,
+    levels,
+    cost,
+    affordable: levels > 0 && canAfford(cost),
+  }
 }
 
 // =====================================================
