@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs, router } from 'expo-router'
-import { Pressable, Text } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 
 function SettingsButton() {
   return (
@@ -14,20 +14,34 @@ function SettingsButton() {
   )
 }
 
+function Money({ value }: { value: number }) {
+  return (
+    <View>
+      <Ionicons name="disc-outline" size={18} color="#F5C542" />
+      <Text>{formatMoney(value)}</Text>
+    </View>
+  )
+}
+
+function formatMoney(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toString()
+}
+
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerLeft: () => <SettingsButton />,
-        headerLeftContainerStyle: { paddingLeft: 0 },
+        headerRight: () => <Money value={12345} />,
         tabBarActiveTintColor: '#000000',
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
-          headerShown: false,
+          title: 'Tracks',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),

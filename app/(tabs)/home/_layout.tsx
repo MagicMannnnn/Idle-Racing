@@ -16,11 +16,12 @@ export default function HomeLayout() {
       <Stack.Screen
         name="index"
         options={{
+          headerShown: false,
           title: 'Tracks',
           headerLeft: () => <SettingsButton />,
         }}
       />
-      <Stack.Screen name="track/[id]" options={{ title: 'Track' }} />
+      <Stack.Screen name="track/[id]" options={{ title: 'Track', headerShown: false }} />
     </Stack>
   )
 }
