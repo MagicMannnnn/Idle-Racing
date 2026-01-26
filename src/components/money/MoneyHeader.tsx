@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons'
 import { View, Text } from 'react-native'
+import { useMoney } from '../../state/useMoney'
 
 export default function Money() {
+  const money = useMoney((s) => s.money)
   return (
-    <View>
-      <Ionicons name="disc-outline" size={18} color="#F5C542" />
-      <Text>{formatMoney(7)}</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 }}>
+      <Text>{formatMoney(money)}</Text>
+      <Ionicons name="disc-outline" size={22} color="#F5C542" />
     </View>
   )
 }
