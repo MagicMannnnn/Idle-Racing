@@ -34,11 +34,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="stats"
+        name="map"
         options={{
-          title: 'Stats',
+          title: 'Map',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" size={size} color={color} />
+            <Ionicons name="map-outline" size={size} color={color} />
           ),
         }}
       />
