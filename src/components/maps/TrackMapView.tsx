@@ -74,6 +74,34 @@ function angleFromDelta(dx: number, dy: number) {
   return '0deg'
 }
 
+function angleFromVector4(vx: number, vy: number) {
+  const mag = Math.hypot(vx, vy)
+  if (mag < 1e-6) return '0deg'
+
+  const nx = vx / mag
+  const ny = vy / mag
+
+  const dirs = [
+    { dx: 0, dy: -1, a: angleFromDelta(0, -1) }, // N
+    { dx: 1, dy: 0, a: angleFromDelta(1, 0) }, // E
+    { dx: 0, dy: 1, a: angleFromDelta(0, 1) }, // S
+    { dx: -1, dy: 0, a: angleFromDelta(-1, 0) }, // W
+  ] as const
+
+  let bestAngle: string = dirs[0].a
+  let bestDot = -Infinity
+
+  for (const d of dirs) {
+    const dot = nx * d.dx + ny * d.dy // already unit vectors
+    if (dot > bestDot) {
+      bestDot = dot
+      bestAngle = d.a
+    }
+  }
+
+  return bestAngle
+}
+
 // ----------------- Kerb helpers -----------------
 type Side = 'N' | 'E' | 'S' | 'W'
 type KerbSides = { N?: boolean; E?: boolean; S?: boolean; W?: boolean }
@@ -107,17 +135,15 @@ function KerbStrip({ side }: { side: Side }) {
 }
 
 /**
- * Draws an L-shaped inner kerb where the apex is at the given corner of THIS tile.
- * Updated: flush to the tile edge (no inset gap).
+ * Inner kerb corner: flush to tile edge (no gap).
  */
 function KerbCorner({ corner }: { corner: InnerCorner }) {
   const thickness = 6
   const stripes = 6
 
-  // ✅ flush to the tile edge
+  // flush to tile edge
   const INSET = 0
 
-  // size of the corner "box" (both legs live inside this box)
   const BOX = '56%' as const
 
   const isTop = corner === 'NE' || corner === 'NW'
@@ -192,6 +218,13 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
   )
 }
 
+function angleFromOrthSum(sumX: number, sumY: number) {
+  // If both components exist, this is a diagonal -> use it (non-90°)
+  const dx = sign(sumX)
+  const dy = sign(sumY)
+  return angleFromDelta(dx, dy)
+}
+
 export function TrackMapView({
   trackId,
   sizePx = 280,
@@ -242,21 +275,97 @@ export function TrackMapView({
     return set
   }, [cells, trackId, capacity, maxCapacity, mapSize])
 
+  // UPDATED: average direction over ALL 8 adjacent track tiles (robust choice)
   const standFacingByIndex = useMemo(() => {
     const map = new Map<number, string>()
     if (!cells.length || standSet.size === 0) return map
 
-    const tracks: Array<{ x: number; y: number }> = []
-    for (let i = 0; i < cells.length; i++) if (cells[i] === 'track') tracks.push(toXY(i, mapSize))
-    if (tracks.length === 0) return map
+    const idxAt = (x: number, y: number) => y * mapSize + x
+    const cellAt = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= mapSize || y >= mapSize) return 'empty'
+      return cells[idxAt(x, y)] ?? 'empty'
+    }
+    const isTrack = (x: number, y: number) => cellAt(x, y) === 'track'
+
+    const tracksAll: Array<{ x: number; y: number }> = []
+    for (let i = 0; i < cells.length; i++)
+      if (cells[i] === 'track') tracksAll.push(toXY(i, mapSize))
+    if (tracksAll.length === 0) return map
+
+    const orth4 = [
+      { dx: 0, dy: -1 }, // N
+      { dx: 1, dy: 0 }, // E
+      { dx: 0, dy: 1 }, // S
+      { dx: -1, dy: 0 }, // W
+    ] as const
 
     for (const idx of standSet) {
       const s = toXY(idx, mapSize)
+
+      const hasN = isTrack(s.x, s.y - 1)
+      const hasE = isTrack(s.x + 1, s.y)
+      const hasS = isTrack(s.x, s.y + 1)
+      const hasW = isTrack(s.x - 1, s.y)
+
+      const nsOnly = hasN && hasS && !hasE && !hasW
+      const ewOnly = hasE && hasW && !hasN && !hasS
+
+      // Opposite-only: don't average (it cancels to 0). Pick one deterministically.
+      if (nsOnly || ewOnly) {
+        const pickFirst = (mix32(fnv1a32(trackId) ^ idx) & 1) === 0
+        if (nsOnly) map.set(idx, pickFirst ? angleFromDelta(0, -1) : angleFromDelta(0, 1))
+        else map.set(idx, pickFirst ? angleFromDelta(1, 0) : angleFromDelta(-1, 0))
+        continue
+      }
+
+      // Otherwise: average orthogonal adjacency.
+      // If it produces a diagonal (non-90°), we KEEP it (e.g. N+E -> NE).
+      let sumX = 0
+      let sumY = 0
+      let count = 0
+
+      if (hasN) {
+        sumY += -1
+        count++
+      }
+      if (hasE) {
+        sumX += 1
+        count++
+      }
+      if (hasS) {
+        sumY += 1
+        count++
+      }
+      if (hasW) {
+        sumX += -1
+        count++
+      }
+
+      if (count > 0) {
+        // If sums cancel (e.g. N+S+E+W, or N+S+E), we can't derive a direction.
+        if (sumX === 0 && sumY === 0) {
+          // deterministic pick among PRESENT orthogonal directions
+          const present: Array<[number, number]> = []
+          if (hasN) present.push([0, -1])
+          if (hasE) present.push([1, 0])
+          if (hasS) present.push([0, 1])
+          if (hasW) present.push([-1, 0])
+
+          const pick = present[mix32(fnv1a32(trackId) ^ idx) % present.length]
+          map.set(idx, angleFromDelta(pick[0], pick[1]))
+        } else {
+          // This will yield diagonal if both components exist, otherwise cardinal.
+          // i.e. if average would be non-90°, use it; otherwise it's a normal 90° facing.
+          map.set(idx, angleFromOrthSum(sumX, sumY))
+        }
+        continue
+      }
+
+      // 2) Fallback: nearest track
       let bestD2 = Number.POSITIVE_INFINITY
       let bestDx = 0
       let bestDy = 0
-
-      for (const t of tracks) {
+      for (const t of tracksAll) {
         const dx = t.x - s.x
         const dy = t.y - s.y
         const d2 = dx * dx + dy * dy
@@ -267,7 +376,6 @@ export function TrackMapView({
           if (d2 === 1) break
         }
       }
-
       map.set(idx, angleFromDelta(sign(bestDx), sign(bestDy)))
     }
 
@@ -303,7 +411,6 @@ export function TrackMapView({
         const straight = (n && s) || (w && e)
 
         if (count === 2 && !straight) {
-          // put outer kerbs on adjacent track tiles (the “arms”)
           if (n) nearCornerIdx.add(idxAt(x, y - 1))
           if (s) nearCornerIdx.add(idxAt(x, y + 1))
           if (w) nearCornerIdx.add(idxAt(x - 1, y))
@@ -335,10 +442,7 @@ export function TrackMapView({
     return map
   }, [cells, mapSize])
 
-  // NEW: non-track tiles can have multiple inner-corner kerbs (up to 4).
-  // Any 2x2 block with 3/4 track places a corner kerb on the missing tile.
-  // Updated rule:
-  // ✅ do NOT place an inner kerb if an adjacent TRACK tile has an OUTER kerb facing into this tile.
+  // UPDATED: inside kerbs are NOT allowed if any adjacent OUTSIDE kerb would touch this tile.
   const innerCornersByIndex = useMemo(() => {
     const map = new Map<number, InnerCorner[]>()
     if (!cells.length) return map
@@ -350,67 +454,27 @@ export function TrackMapView({
     }
     const isTrack = (x: number, y: number) => cellAt(x, y) === 'track'
 
+    // Build suppression set from OUTER kerbs:
+    // if a track tile has an outer kerb on side S, then the tile below is suppressed, etc.
+    const suppressed = new Set<number>()
+    for (const [idx, kerb] of trackKerbsByIndex.entries()) {
+      const { x, y } = toXY(idx, mapSize)
+      if (kerb.outer.N) suppressed.add(idxAt(x, y - 1))
+      if (kerb.outer.E) suppressed.add(idxAt(x + 1, y))
+      if (kerb.outer.S) suppressed.add(idxAt(x, y + 1))
+      if (kerb.outer.W) suppressed.add(idxAt(x - 1, y))
+    }
+
     const pushUnique = (idx: number, c: InnerCorner) => {
+      // cannot place inside kerbs if suppressed by outside kerbs nearby
+      if (suppressed.has(idx)) return
+
       const arr = map.get(idx)
       if (!arr) {
         map.set(idx, [c])
         return
       }
       if (!arr.includes(c)) arr.push(c)
-    }
-
-    // helper: does a track tile at (tx,ty) have an outer kerb on a given side?
-    const hasOuterKerb = (tx: number, ty: number, side: Side) => {
-      const i = idxAt(tx, ty)
-      const k = trackKerbsByIndex.get(i)
-      return !!k?.outer?.[side]
-    }
-
-    // For a missing tile at (mx,my) with inner corner "corner",
-    // determine the two adjacent TRACK tiles that form the inside corner,
-    // and the outer-kerb sides that would face INTO the missing tile.
-    const blockedByAdjacentOuterKerb = (mx: number, my: number, corner: InnerCorner) => {
-      // Missing TL => corner SE; adjacent tracks are TR (x+1,y) and BL (x,y+1)
-      // Outer kerb that faces into missing tile:
-      //  - TR needs outer.W
-      //  - BL needs outer.N
-      if (corner === 'SE') {
-        const tr = isTrack(mx + 1, my) ? hasOuterKerb(mx + 1, my, 'W') : false
-        const bl = isTrack(mx, my + 1) ? hasOuterKerb(mx, my + 1, 'N') : false
-        return tr || bl
-      }
-
-      // Missing TR => corner SW; adjacent tracks are TL (x-1,y) and BR (x,y+1)
-      //  - TL needs outer.E
-      //  - BR needs outer.N
-      if (corner === 'SW') {
-        const tl = isTrack(mx - 1, my) ? hasOuterKerb(mx - 1, my, 'E') : false
-        const br = isTrack(mx, my + 1) ? hasOuterKerb(mx, my + 1, 'N') : false
-        return tl || br
-      }
-
-      // Missing BL => corner NE; adjacent tracks are TL (x,y-1) and BR (x+1,y)
-      // but in 2x2 terms: missing BL at (x,y+1), adjacent tracks are TL (x,y) and BR (x+1,y+1)
-      // For the missing BL position (mx,my):
-      //  - TL at (mx,my-1) needs outer.S
-      //  - BR at (mx+1,my) needs outer.W
-      if (corner === 'NE') {
-        const tl = isTrack(mx, my - 1) ? hasOuterKerb(mx, my - 1, 'S') : false
-        const br = isTrack(mx + 1, my) ? hasOuterKerb(mx + 1, my, 'W') : false
-        return tl || br
-      }
-
-      // Missing BR => corner NW; adjacent tracks are TR (x,y-1) and BL (x-1,y)
-      // For missing BR position (mx,my):
-      //  - tr at (mx,my-1) needs outer.S
-      //  - bl at (mx-1,my) needs outer.E
-      if (corner === 'NW') {
-        const tr = isTrack(mx, my - 1) ? hasOuterKerb(mx, my - 1, 'S') : false
-        const bl = isTrack(mx - 1, my) ? hasOuterKerb(mx - 1, my, 'E') : false
-        return tr || bl
-      }
-
-      return false
     }
 
     for (let y = 0; y < mapSize - 1; y++) {
@@ -423,27 +487,10 @@ export function TrackMapView({
         const trackCount = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0)
         if (trackCount !== 3) continue
 
-        if (!tl) {
-          const mx = x
-          const my = y
-          const corner: InnerCorner = 'SE'
-          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
-        } else if (!tr) {
-          const mx = x + 1
-          const my = y
-          const corner: InnerCorner = 'SW'
-          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
-        } else if (!bl) {
-          const mx = x
-          const my = y + 1
-          const corner: InnerCorner = 'NE'
-          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
-        } else if (!br) {
-          const mx = x + 1
-          const my = y + 1
-          const corner: InnerCorner = 'NW'
-          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
-        }
+        if (!tl) pushUnique(idxAt(x, y), 'SE')
+        else if (!tr) pushUnique(idxAt(x + 1, y), 'SW')
+        else if (!bl) pushUnique(idxAt(x, y + 1), 'NE')
+        else if (!br) pushUnique(idxAt(x + 1, y + 1), 'NW')
       }
     }
 
@@ -490,17 +537,19 @@ export function TrackMapView({
               </>
             ) : null}
 
-            {/* INNER corner kerbs: multiple allowed on a non-track tile */}
+            {/* INNER corner kerbs */}
             {innerCorners?.length
               ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />)
               : null}
 
+            {/* Stands */}
             {showStand ? (
               <View style={[styles.standIcon, { transform: [{ rotate: standRotation }] }]}>
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
-                <View style={styles.standFront} />
+                {/* removed the “thick darker line” -> same as normal bars */}
+                <View style={styles.standBar} />
               </View>
             ) : null}
           </View>
@@ -524,7 +573,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 3,
-    overflow: 'hidden', // keep clipping inside the tile
+    overflow: 'hidden',
   },
 
   empty: { backgroundColor: '#FFFFFF' },
@@ -541,11 +590,6 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 2,
     backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  standFront: {
-    height: 4,
-    borderRadius: 3,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
 
   // ---------- Outer kerbs (edge strips) ----------
