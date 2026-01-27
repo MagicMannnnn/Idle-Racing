@@ -1,3 +1,4 @@
+import { TrackMapView } from '@/src/components/maps/TrackMapView'
 import { useTracks } from '@/src/state/useTracks'
 import { useLocalSearchParams, router } from 'expo-router'
 import React from 'react'
@@ -27,11 +28,18 @@ export default function MapTrackDetail() {
 
         <View style={styles.header}>
           <Text style={styles.pageTitle}>{track.name}</Text>
-          <Text style={styles.pageSubtitle}>Map view - coming soon</Text>
         </View>
       </View>
 
-      <View style={styles.content}>{/* Empty for now */}</View>
+      <View style={styles.content}>
+        <TrackMapView
+          trackId={track.id}
+          sizePx={300}
+          initialGridSize={5 + track.index * 2}
+          capacity={track.capacity}
+          maxCapacity={track.maxCapacity}
+        />
+      </View>
     </SafeAreaView>
   )
 }
