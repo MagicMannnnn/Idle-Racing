@@ -4,7 +4,9 @@ import { useTrackMaps } from '@/src/state/useTrackMaps'
 
 type Props = {
   trackId: string
+  // render size in px
   sizePx?: number
+  // initial grid size for new tracks (5,7,9...)
   initialGridSize?: number
 
   // used to decide how many stands to visually show
@@ -26,7 +28,6 @@ function fnv1a32(str: string) {
 }
 
 function mix32(x: number) {
-  // avalanche bits -> stable pseudo-random
   x ^= x >>> 16
   x = Math.imul(x, 0x7feb352d)
   x ^= x >>> 15
@@ -36,19 +37,42 @@ function mix32(x: number) {
 }
 
 function layoutHash(cells: string[]) {
-  // stable layout fingerprint
   let h = 2166136261 >>> 0
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]
-    // only a few chars, keep it cheap
     for (let j = 0; j < c.length; j++) {
       h ^= c.charCodeAt(j)
       h = Math.imul(h, 16777619)
     }
-    h ^= 1249 // delimiter
+    h ^= 1249
     h = Math.imul(h, 16777619)
   }
   return h >>> 0
+}
+
+function toXY(i: number, size: number) {
+  return { x: i % size, y: Math.floor(i / size) }
+}
+
+function sign(n: number) {
+  return n === 0 ? 0 : n > 0 ? 1 : -1
+}
+
+function angleFromDelta(dx: number, dy: number) {
+  // rotate 90deg anticlockwise: (dx, dy) -> (-dy, dx)
+  const rx = dy
+  const ry = -dx
+
+  // 8-way rotation
+  if (rx === 1 && ry === 0) return '0deg' // E
+  if (rx === 1 && ry === 1) return '45deg' // SE
+  if (rx === 0 && ry === 1) return '90deg' // S
+  if (rx === -1 && ry === 1) return '135deg' // SW
+  if (rx === -1 && ry === 0) return '180deg' // W
+  if (rx === -1 && ry === -1) return '-135deg' // NW
+  if (rx === 0 && ry === -1) return '-90deg' // N
+  if (rx === 1 && ry === -1) return '-45deg' // NE
+  return '0deg'
 }
 
 export function TrackMapView({
@@ -75,7 +99,6 @@ export function TrackMapView({
 
   const wrapW = cellPx * mapSize + GRID_GAP * (mapSize - 1) + GRID_PAD * 2
 
-  // ---- Decide which EMPTY cells actually show stands ----
   const standSet = useMemo(() => {
     if (!cells.length) return new Set<number>()
 
@@ -86,29 +109,68 @@ export function TrackMapView({
     if (emptyIdx.length === 0) return new Set<number>()
 
     const fill = maxCapacity > 0 ? Math.max(0, Math.min(1, capacity / maxCapacity)) : 0
-
-    // Only 10% of stand blocks at full capacity; scaled by fill
     const k = Math.floor(emptyIdx.length * fill)
-    if (k <= 0) return new Set<number>()
 
+    if (k <= 0) return new Set<number>()
+    if (k >= emptyIdx.length) return new Set<number>(emptyIdx)
+
+    // IMPORTANT: seed must NOT depend on capacity, so the ranking is stable.
     const seedA = fnv1a32(trackId)
     const seedB = layoutHash(cells)
-    const seedC = mix32((capacity << 1) ^ (maxCapacity << 9) ^ mapSize)
-
+    const seedC = mix32(mapSize) // or include maxCapacity if you want, but NOT current capacity
     const seed = mix32(seedA ^ seedB ^ seedC)
 
-    // Deterministic selection: score each cell, take lowest k
-    const scored = emptyIdx.map((idx) => {
-      const score = mix32(seed ^ idx) / 0xffffffff
-      return { idx, score }
-    })
-
+    // deterministic rank per cell (stable across capacity changes)
+    const scored = emptyIdx.map((idx) => ({
+      idx,
+      score: mix32(seed ^ idx) / 0xffffffff,
+    }))
     scored.sort((a, b) => a.score - b.score)
 
     const set = new Set<number>()
-    for (let i = 0; i < Math.min(k, scored.length); i++) set.add(scored[i].idx)
+    for (let i = 0; i < k; i++) set.add(scored[i].idx)
     return set
   }, [cells, trackId, capacity, maxCapacity, mapSize])
+
+  // ---- For each stand cell, face toward the nearest track (8-way, includes diagonals) ----
+  const standFacingByIndex = useMemo(() => {
+    const map = new Map<number, string>()
+    if (!cells.length || standSet.size === 0) return map
+
+    const tracks: Array<{ x: number; y: number }> = []
+    for (let i = 0; i < cells.length; i++) {
+      if (cells[i] === 'track') tracks.push(toXY(i, mapSize))
+    }
+    if (tracks.length === 0) return map
+
+    for (const idx of standSet) {
+      const s = toXY(idx, mapSize)
+
+      let bestD2 = Number.POSITIVE_INFINITY
+      let bestDx = 0
+      let bestDy = 0
+
+      for (const t of tracks) {
+        const dx = t.x - s.x
+        const dy = t.y - s.y
+        const d2 = dx * dx + dy * dy
+        if (d2 < bestD2) {
+          bestD2 = d2
+          bestDx = dx
+          bestDy = dy
+
+          // perfect adjacency is d2=1 (orthogonal) or d2=2 (diagonal)
+          if (d2 === 1) break
+        }
+      }
+
+      const dirX = sign(bestDx)
+      const dirY = sign(bestDy)
+      map.set(idx, angleFromDelta(dirX, dirY))
+    }
+
+    return map
+  }, [cells, mapSize, standSet])
 
   return (
     <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
@@ -118,6 +180,7 @@ export function TrackMapView({
 
         const type = cells[i] ?? 'empty'
         const showStand = type === 'empty' && standSet.has(i)
+        const rotation = showStand ? (standFacingByIndex.get(i) ?? '0deg') : '0deg'
 
         return (
           <View
@@ -136,10 +199,11 @@ export function TrackMapView({
             ]}
           >
             {showStand ? (
-              <View style={styles.standIcon}>
+              <View style={[styles.standIcon, { transform: [{ rotate: rotation }] }]}>
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
+                <View style={styles.standFront} />
               </View>
             ) : null}
           </View>
@@ -156,7 +220,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.10)', // grid lines
+
+    // this becomes the grid line color
+    backgroundColor: 'rgba(0,0,0,0.10)',
   },
 
   cell: {
@@ -169,15 +235,20 @@ const styles = StyleSheet.create({
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
   track: { backgroundColor: 'rgba(20, 20, 20, 0.18)' },
 
-  // "actual stands" mini icon
+  // "stands" mini icon (rotated to face the track)
   standIcon: {
-    width: '70%',
-    height: '55%',
+    width: '72%',
+    height: '58%',
     justifyContent: 'space-between',
   },
   standBar: {
     height: 3,
     borderRadius: 2,
     backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  standFront: {
+    height: 4,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.75)',
   },
 })
