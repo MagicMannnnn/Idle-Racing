@@ -112,8 +112,8 @@ function earningsPerSecond(capacity: number, trackSize: number, rating: number, 
 
   const { attendees, racers } = peopleCounts(capacity, trackSize, rng)
 
-  const attendeeMean = rating ** 2 * 10
-  const racerMean = rating ** 3 * 50
+  const attendeeMean = rating ** 3 * 10
+  const racerMean = rating ** 2 * 50
 
   // randomize around mean (about ±25%)
   const attendeeMult = 0.75 + rng() * 0.5
