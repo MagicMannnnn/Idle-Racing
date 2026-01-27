@@ -1,4 +1,3 @@
-// src/state/useEvents.ts
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
@@ -6,142 +5,51 @@ import { useMoney } from '@/src/state/useMoney'
 import { useTracks } from '@/src/state/useTracks'
 
 /**
- * Only ONE event implemented for now: Track Day
- * - One active event per track
- * - While running: track is "locked" (your upgrade store can call useEvents.getState().isTrackLocked(trackId))
- * - While app is open: money is granted gradually via a 1s ticker
- * - On reopen: earnings are estimated for time away (capped)
+ * SUPER SIMPLE EVENTS STORE
+ * - Only one event type: Track Day
+ * - While running OR cooling down: track is locked (no upgrades)
+ * - While app open: pays out every second
+ * - On reopen: estimates offline earnings (capped by runtime)
+ *
+ * Earnings model (per second):
+ * - attendees: ~ rating^2 * 10 each (randomized)
+ * - racers:    ~ rating^3 * 50 each (randomized)
+ * People counts are derived from capacity + trackSize (maxCapacity).
  */
 
-export type EventType = 'track_day'
-
-export type TrackDayConfig = {
-  /** Total runtime of the event (ms). e.g. 10 min */
-  runtimeMs: number
-
-  /**
-   * Max time we will credit offline for this event.
-   * If user is away longer than this, we stop crediting at (startedAt + maxOfflineCreditMs).
-   * Usually set to runtimeMs.
-   */
-  maxOfflineCreditMs: number
-
-  /** Ticket price per attendee per minute (money/min). */
-  ticketPricePerMinute: (p: AttendanceParams) => number
-
-  /**
-   * Attendance "target" as a fraction of capacity (0..1), derived from track stats.
-   * This is the center-point the crowd fluctuates around.
-   */
-  targetFillRatio: (p: AttendanceParams) => number
-
-  /**
-   * Max change in attendees per second, before clamping.
-   * Lets you tune how fast the crowd fills/drains.
-   */
-  maxDeltaPerSecond: (p: AttendanceParams) => number
-
-  /**
-   * Randomness strength (0..1-ish). Higher = more volatile occupancy.
-   */
-  volatility: (p: AttendanceParams) => number
-}
-
-export type AttendanceParams = {
-  // track stats snapshot (pulled from tracks store at tick-time)
-  capacity: number // current capacity
-  maxCapacity: number // size proxy (track "size")
-  safety: number // 0..maxSafety
-  maxSafety: number
-  entertainment: number // 0..maxEntertainment (%)
-  maxEntertainment: number
-  index: number // track index (0-based)
-  rating: number // computed rating from store
-}
-
-export type TrackEventState = {
+export type TrackDayEvent = {
   trackId: string
-  type: EventType
-
   startedAt: number
   endsAt: number
-
-  /** last time we simulated a tick (ms) */
   lastTickAt: number
-
-  /** occupancy is dynamic (attendees currently inside) */
-  occupancy: number
-
-  /** money earned so far during this event */
-  earned: number
-
-  /** for deterministic-ish randomness */
-  rng: number
+  runtimeMs: number
+  carry: number // fractional money buffer
+  seed: number
+  earntLastTick: number
+  total: number
 }
 
 type EventsState = {
-  // Map of trackId -> active event (only one per track)
-  activeByTrack: Record<string, TrackEventState | undefined>
+  activeByTrack: Record<string, TrackDayEvent | undefined>
+  cooldownUntilByTrack: Record<string, number | undefined>
 
-  // Internal ticker control
-  tickerRunning: boolean
-  _intervalId?: number
-
-  // ---- API ----
-  isTrackLocked: (trackId: string) => boolean
-  getActive: (trackId: string) => TrackEventState | undefined
+  isTrackLocked: (trackId: string, now?: number) => boolean
+  getActive: (trackId: string) => TrackDayEvent | undefined
+  getCooldownRemainingMs: (trackId: string, now?: number) => number
 
   startTrackDay: (
     trackId: string,
     runtimeMs: number,
-  ) => { ok: true } | { ok: false; reason: 'already_running' | 'track_not_found' }
-  stopEvent: (trackId: string) => { ok: true } | { ok: false; reason: 'not_running' }
+  ) => { ok: true } | { ok: false; reason: 'already_running' | 'in_cooldown' | 'track_not_found' }
+  stopTrackDay: (trackId: string) => { ok: true } | { ok: false; reason: 'not_running' }
 
-  /** Start/stop the 1s simulation loop (call from RootLayout/AppState) */
   startTicker: () => void
   stopTicker: () => void
-
-  /** Manually run one tick (mostly for tests) */
   tickOnce: (now?: number) => void
 
   reset: () => void
 }
 
-/**
- * ----- Track Day tuning (easy to tweak) -----
- */
-export const trackDayConfig: TrackDayConfig = {
-  runtimeMs: 10 * 60 * 1000,
-  maxOfflineCreditMs: 10 * 60 * 1000,
-
-  ticketPricePerMinute: (p) => {
-    // baseline, slightly boosted by entertainment and track index
-    const entN = p.maxEntertainment ? p.entertainment / p.maxEntertainment : 0
-    return 0.8 + entN * 1.2 + p.index * 0.05
-  },
-
-  targetFillRatio: (p) => {
-    // capacity fill driven mostly by entertainment & safety (safe + fun attracts)
-    const entN = p.maxEntertainment ? p.entertainment / p.maxEntertainment : 0
-    const safN = p.maxSafety ? p.safety / p.maxSafety : 0
-    // keep it sane (never 100% constant)
-    return clamp(0.25 + entN * 0.45 + safN * 0.2, 0.15, 0.92)
-  },
-
-  maxDeltaPerSecond: (p) => {
-    // bigger tracks change faster; small tracks fill slowly
-    const sizeN = p.maxCapacity ? clamp(p.maxCapacity / 250, 0.2, 2.0) : 1
-    return 1.5 * sizeN // attendees/sec (before randomness)
-  },
-
-  volatility: (p) => {
-    // race-day would be higher; track day is pretty stable
-    const entN = p.maxEntertainment ? p.entertainment / p.maxEntertainment : 0
-    return 0.15 + entN * 0.1
-  },
-}
-
-// -------- helpers --------
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
@@ -157,263 +65,233 @@ function mulberry32(seed: number) {
 }
 
 function nextSeed(seed: number) {
-  // simple LCG-ish
   return (seed * 1664525 + 1013904223) >>> 0
 }
 
-function getTrackParams(trackId: string): AttendanceParams | null {
+function credit(amountFloat: number) {
+  if (amountFloat <= 0) return
+  const int = Math.floor(amountFloat)
+  if (int <= 0) return
+  useMoney.getState().add(int)
+}
+
+function getTrack(trackId: string) {
   const t = useTracks.getState().tracks.find((x) => x.id === trackId)
   if (!t) return null
   return {
     capacity: t.capacity,
-    maxCapacity: t.maxCapacity,
-    safety: t.safety,
-    maxSafety: t.maxSafety,
-    entertainment: t.entertainment,
-    maxEntertainment: t.maxEntertainment,
-    index: t.index ?? 0, // if you don’t have index in store, add it OR derive from id
+    trackSize: t.maxCapacity, // treat maxCapacity as size for now
     rating: t.rating,
   }
 }
 
-/**
- * One second of simulation:
- * - crowd moves towards a target occupancy based on track stats
- * - with some randomness, people enter/exit
- * - revenue credited proportional to occupancy (and stats)
- */
-function simulateOneSecondTrackDay(
-  e: TrackEventState,
-  p: AttendanceParams,
-  cfg: TrackDayConfig,
-): { next: TrackEventState; moneyDelta: number } {
-  const rngFn = mulberry32(e.rng)
-  const rand = rngFn() - 0.5 // -0.5..0.5
-  const rand2 = rngFn() - 0.5
+function cooldownForRuntime(runtimeMs: number) {
+  // simple: 20% of runtime, min 10s, max 1h
+  return clamp(Math.round(runtimeMs * 0.2), 10_000, 60 * 60 * 1000)
+}
 
-  const targetRatio = cfg.targetFillRatio(p)
-  const targetOcc = Math.round(targetRatio * p.capacity)
+function peopleCounts(capacity: number, trackSize: number, rng: () => number) {
+  // attendees roughly tied to capacity
+  const attBase = capacity * (0.35 + rng() * 0.55) // 35%..90%
+  const attendees = Math.max(0, Math.round(attBase))
 
-  const maxDelta = cfg.maxDeltaPerSecond(p)
-  const vol = cfg.volatility(p)
+  // racers tied to trackSize but bounded by capacity
+  const sizeN = clamp(trackSize / 250, 0.3, 2.5)
+  const racersBase = capacity * (0.05 + rng() * 0.25) * sizeN // 5%..30% * size factor
+  const racers = clamp(
+    Math.round(racersBase),
+    0,
+    Math.min(capacity, Math.max(2, Math.floor(capacity / 2))),
+  )
 
-  // drift towards target + randomness (enter/exit)
-  const drift = clamp((targetOcc - e.occupancy) * 0.08, -maxDelta, maxDelta)
-  const noise = rand * maxDelta * vol * 2 + rand2 * 0.4
+  return { attendees, racers }
+}
 
-  const delta = Math.round(clamp(drift + noise, -maxDelta, maxDelta))
-  const nextOcc = clamp(e.occupancy + delta, 0, p.capacity)
+function earningsPerSecond(capacity: number, trackSize: number, rating: number, seed: number) {
+  const rng = mulberry32(seed)
 
-  // Revenue per second:
-  // ticketPrice/min * occupancy / 60
-  const perMin = cfg.ticketPricePerMinute(p)
-  const moneyDelta = (perMin * nextOcc) / 60
+  const { attendees, racers } = peopleCounts(capacity, trackSize, rng)
 
-  const next: TrackEventState = {
-    ...e,
-    occupancy: nextOcc,
-    earned: e.earned + moneyDelta,
-    rng: nextSeed(e.rng),
+  const attendeeMean = rating ** 2 * 10
+  const racerMean = rating ** 3 * 50
+
+  // randomize around mean (about ±25%)
+  const attendeeMult = 0.75 + rng() * 0.5
+  const racerMult = 0.75 + rng() * 0.5
+
+  const perSec = (attendees * attendeeMean * attendeeMult + racers * racerMean * racerMult) / 60 // treat the formulas as "per minute" -> pay per second
+
+  return { perSec, nextSeed: nextSeed(seed) }
+}
+
+function simulate(event: TrackDayEvent, now: number) {
+  const t = getTrack(event.trackId)
+  if (!t) return { next: event, creditedInt: 0 }
+
+  const creditEnd = Math.min(now, event.endsAt) // offline capped by endsAt (runtime)
+  const seconds = Math.max(0, Math.floor((creditEnd - event.lastTickAt) / 1000))
+  if (seconds <= 0) return { next: event, creditedInt: 0 }
+
+  let seed = event.seed
+  let carry = event.carry
+
+  for (let i = 0; i < seconds; i++) {
+    const r = earningsPerSecond(t.capacity, t.trackSize, t.rating, seed)
+    seed = r.nextSeed
+    carry += r.perSec
   }
 
-  return { next, moneyDelta }
+  const creditable = Math.floor(carry)
+  event.earntLastTick = creditable
+  event.total += creditable
+  if (creditable > 0) {
+    useMoney.getState().add(creditable)
+    carry -= creditable
+  }
+
+  const next: TrackDayEvent = {
+    ...event,
+    lastTickAt: event.lastTickAt + seconds * 1000,
+    carry,
+    seed,
+  }
+
+  return { next, creditedInt: creditable }
 }
 
 export const useEvents = create<EventsState>()(
   persist(
     (set, get) => ({
       activeByTrack: {},
-      tickerRunning: false,
-      _intervalId: undefined,
+      cooldownUntilByTrack: {},
 
-      isTrackLocked: (trackId) => !!get().activeByTrack[trackId],
+      isTrackLocked: (trackId, now = Date.now()) => {
+        const running = !!get().activeByTrack[trackId]
+        const until = get().cooldownUntilByTrack[trackId] ?? 0
+        return running || until > now
+      },
+
       getActive: (trackId) => get().activeByTrack[trackId],
 
-      startTrackDay: (trackId, runtimeMs) => {
-        const existing = get().activeByTrack[trackId]
-        if (existing) return { ok: false as const, reason: 'already_running' }
+      getCooldownRemainingMs: (trackId, now = Date.now()) => {
+        const until = get().cooldownUntilByTrack[trackId] ?? 0
+        return Math.max(0, until - now)
+      },
 
-        const p = getTrackParams(trackId)
-        if (!p) return { ok: false as const, reason: 'track_not_found' }
+      startTrackDay: (trackId, runtimeMs) => {
+        if (get().activeByTrack[trackId]) return { ok: false as const, reason: 'already_running' }
+        if (get().isTrackLocked(trackId)) return { ok: false as const, reason: 'in_cooldown' }
+
+        const t = getTrack(trackId)
+        if (!t) return { ok: false as const, reason: 'track_not_found' }
 
         const now = Date.now()
-        const endsAt = now + runtimeMs
-
-        // start with a small crowd so it feels alive
-        const startOcc = clamp(Math.round(p.capacity * 0.2), 0, p.capacity)
-
-        const event: TrackEventState = {
+        const e: TrackDayEvent = {
           trackId,
-          type: 'track_day',
           startedAt: now,
-          endsAt,
+          endsAt: now + runtimeMs,
           lastTickAt: now,
-          occupancy: startOcc,
-          earned: 0,
-          rng: (now ^ trackId.length ^ 0x9e3779b9) >>> 0,
+          runtimeMs,
+          carry: 0,
+          earntLastTick: 0,
+          total: 0,
+          seed: (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0,
         }
 
-        set((s) => ({
-          activeByTrack: { ...s.activeByTrack, [trackId]: event },
-        }))
-
-        // Ensure ticker is running if they start an event
+        set((s) => ({ activeByTrack: { ...s.activeByTrack, [trackId]: e } }))
         get().startTicker()
-
         return { ok: true as const }
       },
 
-      stopEvent: (trackId) => {
-        const existing = get().activeByTrack[trackId]
-        if (!existing) return { ok: false as const, reason: 'not_running' }
+      stopTrackDay: (trackId) => {
+        const e = get().activeByTrack[trackId]
+        if (!e) return { ok: false as const, reason: 'not_running' }
 
+        const now = Date.now()
+        // simulate up to now before stopping
+        const res = simulate(e, now)
+
+        const cdMs = cooldownForRuntime(e.runtimeMs)
         set((s) => {
-          const next = { ...s.activeByTrack }
-          delete next[trackId]
-          return { activeByTrack: next }
+          const nextActive = { ...s.activeByTrack }
+          delete nextActive[trackId]
+          return {
+            activeByTrack: nextActive,
+            cooldownUntilByTrack: { ...s.cooldownUntilByTrack, [trackId]: now + cdMs },
+          }
         })
+
+        // if we advanced lastTickAt internally, we already credited money inside simulate()
+        void res
 
         return { ok: true as const }
       },
 
       startTicker: () => {
-        if (get().tickerRunning) return
+        // simplest: one global interval stored on globalThis to avoid extra store fields/types
+        const g = globalThis as any
+        if (g.__eventsTickerId) return
 
-        // Reconcile offline time once at ticker start (rehydrate-safe)
+        // reconcile once
         get().tickOnce(Date.now())
 
-        const id = setInterval(() => {
+        g.__eventsTickerId = setInterval(() => {
           get().tickOnce(Date.now())
-        }, 1000) as unknown as number
-
-        set({ tickerRunning: true, _intervalId: id })
+        }, 1000)
       },
 
       stopTicker: () => {
-        const id = get()._intervalId
-        if (id != null) clearInterval(id as any)
-        set({ tickerRunning: false, _intervalId: undefined })
+        const g = globalThis as any
+        const id = g.__eventsTickerId
+        if (id) clearInterval(id)
+        g.__eventsTickerId = null
       },
 
       tickOnce: (now = Date.now()) => {
         const state = get()
         const active = state.activeByTrack
-        const trackIds = Object.keys(active)
-        if (trackIds.length === 0) return
+        const ids = Object.keys(active)
+        if (ids.length === 0) {
+          get().stopTicker()
+          return
+        }
 
         let changed = false
-        const nextByTrack: Record<string, TrackEventState | undefined> = { ...active }
+        const nextActive: Record<string, TrackDayEvent | undefined> = { ...active }
+        const nextCooldown: Record<string, number | undefined> = { ...state.cooldownUntilByTrack }
 
-        for (const trackId of trackIds) {
+        for (const trackId of ids) {
           const e = active[trackId]
           if (!e) continue
 
-          // Determine effective end for crediting (cap offline)
-          const cfg = trackDayConfig
-          const maxCreditEnd = e.startedAt + Math.min(cfg.maxOfflineCreditMs, cfg.runtimeMs)
-          const creditEnd = Math.min(e.endsAt, maxCreditEnd)
+          // offline capped to runtime via endsAt
+          const res = simulate(e, now)
+          nextActive[trackId] = res.next
+          changed =
+            changed ||
+            res.next.lastTickAt !== e.lastTickAt ||
+            res.next.carry !== e.carry ||
+            res.next.seed !== e.seed
 
-          // If event is past credit end, finalize and remove
-          if (now >= creditEnd) {
-            // Run remaining time up to creditEnd (if lastTickAt behind)
-            const finalTickAt = Math.min(creditEnd, now)
-            const res = simulateRange(e, trackId, finalTickAt)
-            if (res.moneyDelta > 0) creditMoney(res.moneyDelta)
-
-            delete nextByTrack[trackId]
+          if (now >= e.endsAt) {
+            nextCooldown[trackId] = now + cooldownForRuntime(e.runtimeMs)
+            delete nextActive[trackId]
             changed = true
-            continue
           }
-
-          // Otherwise, simulate forward from lastTickAt to now (cap to creditEnd)
-          const targetNow = Math.min(now, creditEnd)
-          if (targetNow <= e.lastTickAt) continue
-
-          const res = simulateRange(e, trackId, targetNow)
-          if (res.moneyDelta > 0) creditMoney(res.moneyDelta)
-
-          nextByTrack[trackId] = {
-            ...res.next,
-            lastTickAt: targetNow,
-          }
-          changed = true
         }
 
-        if (changed) set({ activeByTrack: nextByTrack })
+        if (changed) set({ activeByTrack: nextActive, cooldownUntilByTrack: nextCooldown })
       },
 
       reset: () => {
-        const id = get()._intervalId
-        if (id != null) clearInterval(id as any)
-        set({ activeByTrack: {}, tickerRunning: false, _intervalId: undefined })
+        get().stopTicker()
+        set({ activeByTrack: {}, cooldownUntilByTrack: {} })
       },
     }),
     {
-      name: 'idle.events.v1',
+      name: 'idle.events.simple.v1',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
-      // Note: On rehydrate, the ticker isn't automatically started (so we don't leak intervals).
-      // Call useEvents.getState().startTicker() from your RootLayout/AppState once app is active.
     },
   ),
 )
-
-/**
- * Simulate in 1-second steps up to targetTime.
- * - While app is open, tickOnce() is called every 1s, so this does 1 step.
- * - On reopen/offline gap, it may do many steps; we cap cost by chunking:
- *   - If gap > 60s, step in 5s increments to keep it cheap (still plausible).
- */
-function simulateRange(event: TrackEventState, trackId: string, targetTime: number) {
-  const p = getTrackParams(trackId)
-  if (!p) return { next: event, moneyDelta: 0 }
-
-  const cfg = trackDayConfig
-
-  const dtMs = targetTime - event.lastTickAt
-  const seconds = Math.max(0, Math.floor(dtMs / 1000))
-  if (seconds <= 0) return { next: event, moneyDelta: 0 }
-
-  // Step size: 1s when small gaps, 5s when larger gaps (offline)
-  const stepSec = seconds <= 60 ? 1 : 5
-  const steps = Math.ceil(seconds / stepSec)
-
-  let cur = event
-  let totalMoney = 0
-
-  for (let i = 0; i < steps; i++) {
-    // When stepping 5s, run 5 x 1-second sims (still consistent behaviour)
-    const inner = stepSec
-    for (let s = 0; s < inner; s++) {
-      // stop if we overshoot targetTime (due to ceil)
-      const simulatedMs = (i * stepSec + s + 1) * 1000
-      if (simulatedMs > dtMs) break
-
-      const out = simulateOneSecondTrackDay(cur, p, cfg)
-      cur = out.next
-      totalMoney += out.moneyDelta
-    }
-  }
-
-  return { next: cur, moneyDelta: totalMoney }
-}
-
-/**
- * Credits money gradually to the Money store.
- * Adjust this method call to your actual useMoney API.
- */
-function creditMoney(amount: number) {
-  const rounded = Math.max(0, Math.round(amount))
-  if (rounded <= 0) return
-
-  const money = useMoney.getState() as any
-  if (typeof money.add === 'function') {
-    money.add(rounded)
-    return
-  }
-  if (typeof money.earn === 'function') {
-    money.earn(rounded)
-    return
-  }
-  // If your store uses a setter instead, update this accordingly.
-}

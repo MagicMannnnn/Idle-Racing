@@ -42,7 +42,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
   // Only Track Day for now
   const active = useEvents((s) => s.getActive(track.id))
   const startTrackDay = useEvents((s) => s.startTrackDay)
-  const stopEvent = useEvents((s) => s.stopEvent)
   const startTicker = useEvents((s) => s.startTicker)
   const tickOnce = useEvents((s) => s.tickOnce)
 
@@ -81,10 +80,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
     const res = startTrackDay(track.id, runtimeMs)
     // ignore errors in UI for now (already running / track not found)
     void res
-  }
-
-  const onStop = () => {
-    stopEvent(track.id)
   }
 
   return (
@@ -155,25 +150,17 @@ export default function TrackEvents(props: { track: TrackLike }) {
 
             <View style={styles.earnRow}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.bigIncome}>+ {formatMoney(Math.round(active.earned))}</Text>
-                <Text style={styles.buyLeftSub}>
-                  Simulated earnings so far • occupancy {active.occupancy}/{track.capacity}
+                <Text style={styles.bigIncome}>
+                  + {formatMoney(Math.round(active.earntLastTick))}{' '}
+                  {' /s  \ttotal: ' + active.total.toLocaleString()}
                 </Text>
               </View>
-
-              <Pressable
-                onPress={onStop}
-                style={({ pressed }) => [styles.stopBtn, pressed && styles.pressed]}
-              >
-                <Text style={styles.stopBtnText}>Stop</Text>
-              </Pressable>
             </View>
           </View>
         ) : (
           <View style={styles.readyRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.buyLeft}>Run {formatDurationLabel(minutes)}</Text>
-              <Text style={styles.buyLeftSub}>Free • money comes in gradually while running</Text>
             </View>
 
             <Pressable
