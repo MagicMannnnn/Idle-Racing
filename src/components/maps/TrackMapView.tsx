@@ -1,15 +1,12 @@
+// src/components/maps/TrackMapView.tsx
 import React, { useEffect, useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useTrackMaps } from '@/src/state/useTrackMaps'
 
 type Props = {
   trackId: string
-  // render size in px
   sizePx?: number
-  // initial grid size for new tracks (5,7,9...)
   initialGridSize?: number
-
-  // used to decide how many stands to visually show
   capacity: number
   maxCapacity: number
 }
@@ -60,19 +57,57 @@ function sign(n: number) {
 
 function angleFromDelta(dx: number, dy: number) {
   // rotate 90deg anticlockwise: (dx, dy) -> (-dy, dx)
-  const rx = dy
-  const ry = -dx
+  const rx = -dy
+  const ry = dx
 
-  // 8-way rotation
-  if (rx === 1 && ry === 0) return '0deg' // E
-  if (rx === 1 && ry === 1) return '45deg' // SE
-  if (rx === 0 && ry === 1) return '90deg' // S
-  if (rx === -1 && ry === 1) return '135deg' // SW
-  if (rx === -1 && ry === 0) return '180deg' // W
-  if (rx === -1 && ry === -1) return '-135deg' // NW
-  if (rx === 0 && ry === -1) return '-90deg' // N
-  if (rx === 1 && ry === -1) return '-45deg' // NE
+  if (rx === 1 && ry === 0) return '0deg'
+  if (rx === 1 && ry === 1) return '45deg'
+  if (rx === 0 && ry === 1) return '90deg'
+  if (rx === -1 && ry === 1) return '135deg'
+  if (rx === -1 && ry === 0) return '180deg'
+  if (rx === -1 && ry === -1) return '-135deg'
+  if (rx === 0 && ry === -1) return '-90deg'
+  if (rx === 1 && ry === -1) return '-45deg'
   return '0deg'
+}
+
+// ----------------- Kerb rendering helpers -----------------
+type Side = 'N' | 'E' | 'S' | 'W'
+type KerbSides = { N?: boolean; E?: boolean; S?: boolean; W?: boolean }
+type Kerb = { inner: KerbSides; outer: KerbSides; innerMid: KerbSides }
+
+function KerbStrip({ side, inset }: { side: Side; inset: 'edge' | 'mid' }) {
+  // red/white striped kerb
+  const stripes = 6
+  const isHorizontal = side === 'N' || side === 'S'
+
+  const wrapStyle = isHorizontal
+    ? [
+        styles.kerbStrip,
+        styles.kerbStripH,
+        inset === 'edge' ? (side === 'N' ? styles.kerbTop : styles.kerbBottom) : styles.kerbMidH,
+      ]
+    : [
+        styles.kerbStrip,
+        styles.kerbStripV,
+        inset === 'edge' ? (side === 'W' ? styles.kerbLeft : styles.kerbRight) : styles.kerbMidV,
+      ]
+
+  return (
+    <View pointerEvents="none" style={wrapStyle}>
+      {Array.from({ length: stripes }).map((_, i) => (
+        <View
+          // eslint-disable-next-line react/no-array-index-key
+          key={`${side}_${inset}_${i}`}
+          style={[
+            styles.kerbStripe,
+            isHorizontal ? styles.kerbStripeH : styles.kerbStripeV,
+            i % 2 === 0 ? styles.kerbRed : styles.kerbWhite,
+          ]}
+        />
+      ))}
+    </View>
+  )
 }
 
 export function TrackMapView({
@@ -114,13 +149,12 @@ export function TrackMapView({
     if (k <= 0) return new Set<number>()
     if (k >= emptyIdx.length) return new Set<number>(emptyIdx)
 
-    // IMPORTANT: seed must NOT depend on capacity, so the ranking is stable.
+    // stable ranking: seed must NOT depend on current capacity
     const seedA = fnv1a32(trackId)
     const seedB = layoutHash(cells)
-    const seedC = mix32(mapSize) // or include maxCapacity if you want, but NOT current capacity
+    const seedC = mix32(mapSize)
     const seed = mix32(seedA ^ seedB ^ seedC)
 
-    // deterministic rank per cell (stable across capacity changes)
     const scored = emptyIdx.map((idx) => ({
       idx,
       score: mix32(seed ^ idx) / 0xffffffff,
@@ -158,8 +192,6 @@ export function TrackMapView({
           bestD2 = d2
           bestDx = dx
           bestDy = dy
-
-          // perfect adjacency is d2=1 (orthogonal) or d2=2 (diagonal)
           if (d2 === 1) break
         }
       }
@@ -172,6 +204,108 @@ export function TrackMapView({
     return map
   }, [cells, mapSize, standSet])
 
+  /**
+   * Kerbs
+   * - OUTER kerbs: keep your existing behavior (near-corner, on sides touching empty)
+   * - INNER kerbs (new): for track cells where 3/4 neighbors are track (NOT 4/4),
+   *   place kerbs "halfway inside" the cell on each side that touches a non-track neighbor.
+   */
+  const kerbsByIndex = useMemo(() => {
+    const map = new Map<number, Kerb>()
+    if (!cells.length) return map
+
+    const idxAt = (x: number, y: number) => y * mapSize + x
+    const cellAt = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= mapSize || y >= mapSize) return 'empty'
+      return cells[idxAt(x, y)] ?? 'empty'
+    }
+    const isTrack = (x: number, y: number) => cellAt(x, y) === 'track'
+    const isEmpty = (x: number, y: number) => cellAt(x, y) === 'empty'
+
+    const cornerIdx = new Set<number>()
+    const nearCornerIdx = new Set<number>()
+
+    // --- detect corners for OUTER kerbs ---
+    for (let y = 0; y < mapSize; y++) {
+      for (let x = 0; x < mapSize; x++) {
+        if (!isTrack(x, y)) continue
+
+        const n = isTrack(x, y - 1)
+        const s = isTrack(x, y + 1)
+        const w = isTrack(x - 1, y)
+        const e = isTrack(x + 1, y)
+
+        const count = (n ? 1 : 0) + (s ? 1 : 0) + (w ? 1 : 0) + (e ? 1 : 0)
+        const straight = (n && s) || (w && e)
+
+        if (count === 2 && !straight) {
+          const idx = idxAt(x, y)
+          cornerIdx.add(idx)
+          if (n) nearCornerIdx.add(idxAt(x, y - 1))
+          if (s) nearCornerIdx.add(idxAt(x, y + 1))
+          if (w) nearCornerIdx.add(idxAt(x - 1, y))
+          if (e) nearCornerIdx.add(idxAt(x + 1, y))
+        }
+      }
+    }
+
+    // --- assign kerb edges ---
+    for (let y = 0; y < mapSize; y++) {
+      for (let x = 0; x < mapSize; x++) {
+        if (!isTrack(x, y)) continue
+        const idx = idxAt(x, y)
+
+        const inner: KerbSides = {}
+        const outer: KerbSides = {}
+        const innerMid: KerbSides = {}
+
+        // OUTER kerbs: only on near-corner cells, on sides that touch empty
+        if (nearCornerIdx.has(idx)) {
+          if (isEmpty(x, y - 1)) outer.N = true
+          if (isEmpty(x + 1, y)) outer.E = true
+          if (isEmpty(x, y + 1)) outer.S = true
+          if (isEmpty(x - 1, y)) outer.W = true
+        }
+
+        // INNER kerbs (new rule):
+        // if 3/4 neighbors are track (but not 4/4), then for each side adjacent to NON-track,
+        // place a kerb halfway inside the track cell on that side.
+        const nT = isTrack(x, y - 1)
+        const eT = isTrack(x + 1, y)
+        const sT = isTrack(x, y + 1)
+        const wT = isTrack(x - 1, y)
+        const countTrack = (nT ? 1 : 0) + (eT ? 1 : 0) + (sT ? 1 : 0) + (wT ? 1 : 0)
+
+        if (countTrack === 3) {
+          if (!nT) innerMid.N = true
+          if (!eT) innerMid.E = true
+          if (!sT) innerMid.S = true
+          if (!wT) innerMid.W = true
+        }
+
+        // keep object only if any kerb flags exist
+        if (
+          inner.N ||
+          inner.E ||
+          inner.S ||
+          inner.W ||
+          outer.N ||
+          outer.E ||
+          outer.S ||
+          outer.W ||
+          innerMid.N ||
+          innerMid.E ||
+          innerMid.S ||
+          innerMid.W
+        ) {
+          map.set(idx, { inner, outer, innerMid })
+        }
+      }
+    }
+
+    return map
+  }, [cells, mapSize])
+
   return (
     <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
       {Array.from({ length: mapSize * mapSize }).map((_, i) => {
@@ -179,8 +313,11 @@ export function TrackMapView({
         const y = Math.floor(i / mapSize)
 
         const type = cells[i] ?? 'empty'
+
         const showStand = type === 'empty' && standSet.has(i)
-        const rotation = showStand ? (standFacingByIndex.get(i) ?? '0deg') : '0deg'
+        const standRotation = showStand ? (standFacingByIndex.get(i) ?? '0deg') : '0deg'
+
+        const kerb = type === 'track' ? kerbsByIndex.get(i) : undefined
 
         return (
           <View
@@ -198,8 +335,26 @@ export function TrackMapView({
               type === 'track' && styles.track,
             ]}
           >
+            {/* Kerbs */}
+            {type === 'track' && kerb ? (
+              <>
+                {/* OUTER kerbs (edge) */}
+                {kerb.outer.N ? <KerbStrip side="N" inset="edge" /> : null}
+                {kerb.outer.E ? <KerbStrip side="E" inset="edge" /> : null}
+                {kerb.outer.S ? <KerbStrip side="S" inset="edge" /> : null}
+                {kerb.outer.W ? <KerbStrip side="W" inset="edge" /> : null}
+
+                {/* INNER kerbs (halfway inside) */}
+                {kerb.innerMid.N ? <KerbStrip side="N" inset="mid" /> : null}
+                {kerb.innerMid.E ? <KerbStrip side="E" inset="mid" /> : null}
+                {kerb.innerMid.S ? <KerbStrip side="S" inset="mid" /> : null}
+                {kerb.innerMid.W ? <KerbStrip side="W" inset="mid" /> : null}
+              </>
+            ) : null}
+
+            {/* Stands */}
             {showStand ? (
-              <View style={[styles.standIcon, { transform: [{ rotate: rotation }] }]}>
+              <View style={[styles.standIcon, { transform: [{ rotate: standRotation }] }]}>
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
@@ -220,22 +375,21 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderRadius: 18,
     overflow: 'hidden',
-
-    // this becomes the grid line color
-    backgroundColor: 'rgba(0,0,0,0.10)',
+    backgroundColor: 'rgba(0,0,0,0.10)', // grid lines
   },
 
   cell: {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 3,
+    overflow: 'hidden', // clip kerbs
   },
 
   empty: { backgroundColor: '#FFFFFF' },
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
   track: { backgroundColor: 'rgba(20, 20, 20, 0.18)' },
 
-  // "stands" mini icon (rotated to face the track)
+  // ---------- Stands ----------
   standIcon: {
     width: '72%',
     height: '58%',
@@ -251,4 +405,53 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: 'rgba(0,0,0,0.75)',
   },
+
+  // ---------- Kerbs ----------
+  kerbStrip: {
+    position: 'absolute',
+    overflow: 'hidden',
+  },
+
+  // Edge kerbs
+  kerbStripH: {
+    left: 0,
+    right: 0,
+    height: 6,
+    flexDirection: 'row',
+  },
+  kerbStripV: {
+    top: 0,
+    bottom: 0,
+    width: 6,
+    flexDirection: 'column',
+  },
+  kerbTop: { top: 0 },
+  kerbBottom: { bottom: 0 },
+  kerbLeft: { left: 0 },
+  kerbRight: { right: 0 },
+
+  // Mid (halfway-inside) kerbs
+  kerbMidH: {
+    left: 0,
+    right: 0,
+    top: '50%',
+    height: 6,
+    flexDirection: 'row',
+    transform: [{ translateY: -3 }],
+  },
+  kerbMidV: {
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 6,
+    flexDirection: 'column',
+    transform: [{ translateX: -3 }],
+  },
+
+  kerbStripe: {},
+  kerbStripeH: { flex: 1 },
+  kerbStripeV: { flex: 1 },
+
+  kerbRed: { backgroundColor: '#D32F2F' },
+  kerbWhite: { backgroundColor: '#FFFFFF' },
 })
