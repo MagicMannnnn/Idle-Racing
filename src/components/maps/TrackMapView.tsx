@@ -108,14 +108,14 @@ function KerbStrip({ side }: { side: Side }) {
 
 /**
  * Draws an L-shaped inner kerb where the apex is at the given corner of THIS tile.
- * Implemented as a square "corner box" inset from edges, so the two legs always align perfectly.
+ * Updated: flush to the tile edge (no inset gap).
  */
 function KerbCorner({ corner }: { corner: InnerCorner }) {
   const thickness = 6
   const stripes = 6
 
-  // keep fully inside tile so neighbours never clip it
-  const INSET = 2
+  // ✅ flush to the tile edge
+  const INSET = 0
 
   // size of the corner "box" (both legs live inside this box)
   const BOX = '56%' as const
@@ -135,7 +135,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
     right: isRight ? INSET : undefined,
   }
 
-  // inside the box, legs hug the box edges, meeting at the box corner -> perfect alignment
   const hLegStyle = {
     position: 'absolute' as const,
     height: thickness,
@@ -338,6 +337,8 @@ export function TrackMapView({
 
   // NEW: non-track tiles can have multiple inner-corner kerbs (up to 4).
   // Any 2x2 block with 3/4 track places a corner kerb on the missing tile.
+  // Updated rule:
+  // ✅ do NOT place an inner kerb if an adjacent TRACK tile has an OUTER kerb facing into this tile.
   const innerCornersByIndex = useMemo(() => {
     const map = new Map<number, InnerCorner[]>()
     if (!cells.length) return map
@@ -358,6 +359,60 @@ export function TrackMapView({
       if (!arr.includes(c)) arr.push(c)
     }
 
+    // helper: does a track tile at (tx,ty) have an outer kerb on a given side?
+    const hasOuterKerb = (tx: number, ty: number, side: Side) => {
+      const i = idxAt(tx, ty)
+      const k = trackKerbsByIndex.get(i)
+      return !!k?.outer?.[side]
+    }
+
+    // For a missing tile at (mx,my) with inner corner "corner",
+    // determine the two adjacent TRACK tiles that form the inside corner,
+    // and the outer-kerb sides that would face INTO the missing tile.
+    const blockedByAdjacentOuterKerb = (mx: number, my: number, corner: InnerCorner) => {
+      // Missing TL => corner SE; adjacent tracks are TR (x+1,y) and BL (x,y+1)
+      // Outer kerb that faces into missing tile:
+      //  - TR needs outer.W
+      //  - BL needs outer.N
+      if (corner === 'SE') {
+        const tr = isTrack(mx + 1, my) ? hasOuterKerb(mx + 1, my, 'W') : false
+        const bl = isTrack(mx, my + 1) ? hasOuterKerb(mx, my + 1, 'N') : false
+        return tr || bl
+      }
+
+      // Missing TR => corner SW; adjacent tracks are TL (x-1,y) and BR (x,y+1)
+      //  - TL needs outer.E
+      //  - BR needs outer.N
+      if (corner === 'SW') {
+        const tl = isTrack(mx - 1, my) ? hasOuterKerb(mx - 1, my, 'E') : false
+        const br = isTrack(mx, my + 1) ? hasOuterKerb(mx, my + 1, 'N') : false
+        return tl || br
+      }
+
+      // Missing BL => corner NE; adjacent tracks are TL (x,y-1) and BR (x+1,y)
+      // but in 2x2 terms: missing BL at (x,y+1), adjacent tracks are TL (x,y) and BR (x+1,y+1)
+      // For the missing BL position (mx,my):
+      //  - TL at (mx,my-1) needs outer.S
+      //  - BR at (mx+1,my) needs outer.W
+      if (corner === 'NE') {
+        const tl = isTrack(mx, my - 1) ? hasOuterKerb(mx, my - 1, 'S') : false
+        const br = isTrack(mx + 1, my) ? hasOuterKerb(mx + 1, my, 'W') : false
+        return tl || br
+      }
+
+      // Missing BR => corner NW; adjacent tracks are TR (x,y-1) and BL (x-1,y)
+      // For missing BR position (mx,my):
+      //  - tr at (mx,my-1) needs outer.S
+      //  - bl at (mx-1,my) needs outer.E
+      if (corner === 'NW') {
+        const tr = isTrack(mx, my - 1) ? hasOuterKerb(mx, my - 1, 'S') : false
+        const bl = isTrack(mx - 1, my) ? hasOuterKerb(mx - 1, my, 'E') : false
+        return tr || bl
+      }
+
+      return false
+    }
+
     for (let y = 0; y < mapSize - 1; y++) {
       for (let x = 0; x < mapSize - 1; x++) {
         const tl = isTrack(x, y)
@@ -368,19 +423,32 @@ export function TrackMapView({
         const trackCount = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0)
         if (trackCount !== 3) continue
 
-        // missing TL => kerbs on E + S => apex SE
-        if (!tl) pushUnique(idxAt(x, y), 'SE')
-        // missing TR => kerbs on W + S => apex SW
-        else if (!tr) pushUnique(idxAt(x + 1, y), 'SW')
-        // missing BL => kerbs on E + N => apex NE
-        else if (!bl) pushUnique(idxAt(x, y + 1), 'NE')
-        // missing BR => kerbs on W + N => apex NW
-        else if (!br) pushUnique(idxAt(x + 1, y + 1), 'NW')
+        if (!tl) {
+          const mx = x
+          const my = y
+          const corner: InnerCorner = 'SE'
+          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
+        } else if (!tr) {
+          const mx = x + 1
+          const my = y
+          const corner: InnerCorner = 'SW'
+          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
+        } else if (!bl) {
+          const mx = x
+          const my = y + 1
+          const corner: InnerCorner = 'NE'
+          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
+        } else if (!br) {
+          const mx = x + 1
+          const my = y + 1
+          const corner: InnerCorner = 'NW'
+          if (!blockedByAdjacentOuterKerb(mx, my, corner)) pushUnique(idxAt(mx, my), corner)
+        }
       }
     }
 
     return map
-  }, [cells, mapSize])
+  }, [cells, mapSize, trackKerbsByIndex])
 
   return (
     <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
@@ -477,7 +545,7 @@ const styles = StyleSheet.create({
   standFront: {
     height: 4,
     borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
 
   // ---------- Outer kerbs (edge strips) ----------

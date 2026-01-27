@@ -21,8 +21,12 @@ export type TrackMapState = {
   ensure: (trackId: string, size?: number) => void
   setSize: (trackId: string, size: number) => void // regenerates default oval
 
-  // editing helpers (for later)
+  // editing helpers
   setCell: (trackId: string, x: number, y: number, type: CellType) => void
+
+  // NEW: commit full grid at once (editor save)
+  setCells: (trackId: string, cells: CellType[]) => void
+
   clear: (trackId: string) => void // regenerates default oval
 
   resetAll: () => void
@@ -43,12 +47,9 @@ export function generateDefaultOval(size: number): TrackGrid {
   const cx = (size - 1) / 2
   const cy = (size - 1) / 2
 
-  // This is the important part:
-  // For size=5 => innerR=0.5, outerR=1.5 => "middle 3x3 without center"
   const innerR = size * 0.1
   const outerR = size * 0.3
 
-  // Slight oval scaling (wider than tall)
   const sx = 1.15
   const sy = 0.95
 
@@ -89,10 +90,11 @@ export const useTrackMaps = create<TrackMapState>()(
       },
 
       setSize: (trackId, size) => {
-        if (size < 3) size = 3
-        if (size % 2 === 0) size += 1 // odd sizes look nicer (5,7,9...)
+        let nextSize = size
+        if (nextSize < 3) nextSize = 3
+        if (nextSize % 2 === 0) nextSize += 1
         set((s) => ({
-          byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(size) },
+          byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(nextSize) },
         }))
       },
 
@@ -104,9 +106,31 @@ export const useTrackMaps = create<TrackMapState>()(
         const idx = y * grid.size + x
         const next = grid.cells.slice()
 
-        // simple guard: stands should only be placed on empty cells (for later)
+        // keep your existing invariant for single-cell edits
         if (type === 'stand' && next[idx] !== 'empty') return
+
         next[idx] = type
+
+        set((s) => ({
+          byTrackId: {
+            ...s.byTrackId,
+            [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
+          },
+        }))
+      },
+
+      // ✅ NEW: commit full grid exactly as provided (no “corrections” based on old grid)
+      setCells: (trackId, cells) => {
+        const grid = get().byTrackId[trackId]
+        if (!grid) return
+        if (cells.length !== grid.size * grid.size) return
+
+        // Optional: ensure stand only appears on empty IN THE PROVIDED CELLS.
+        // (Viewer expects stands only live on empty.)
+        const next = cells.slice()
+        for (let i = 0; i < next.length; i++) {
+          if (next[i] === 'stand') next[i] = 'empty'
+        }
 
         set((s) => ({
           byTrackId: {
