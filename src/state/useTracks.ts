@@ -109,7 +109,7 @@ function trackCostForIndex(index: number) {
 /** Tier multiplier so later tracks are pricier */
 function tierMult(index: number) {
   // tweak to make later tracks scale harder/softer
-  return 1 + Math.pow(index, 1.4)
+  return index === 0 ? 0.3 : 1 + Math.pow(index, 1.4)
 }
 
 // ------- Stat ranges by index (tweak these) -------
