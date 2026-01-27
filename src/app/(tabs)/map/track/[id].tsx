@@ -1,4 +1,5 @@
 import { TrackMapEditor } from '@/src/components/maps/TrackMapEditor'
+import { TrackMapEventLiveView } from '@/src/components/maps/TrackMapEventLiveView'
 import { TrackMapView } from '@/src/components/maps/TrackMapView'
 import { useTracks } from '@/src/state/useTracks'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -63,7 +64,7 @@ export default function MapTrackDetail() {
             onSaved={() => setIsEditing(false)}
           />
         ) : (
-          <TrackMapView
+          <TrackMapEventLiveView
             trackId={track.id}
             sizePx={300}
             initialGridSize={initialGridSize}
