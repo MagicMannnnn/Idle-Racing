@@ -39,26 +39,26 @@ function formatCountdown(ms: number) {
 export default function TrackEvents(props: { track: TrackLike }) {
   const { track } = props
 
-  // Only Track Day for now
+  const [now, setNow] = useState(() => Date.now())
+  const [stepIdx, setStepIdx] = useState(0)
+
   const active = useEvents((s) => s.getActive(track.id))
   const startTrackDay = useEvents((s) => s.startTrackDay)
   const startTicker = useEvents((s) => s.startTicker)
   const tickOnce = useEvents((s) => s.tickOnce)
 
-  const [now, setNow] = useState(() => Date.now())
-  const [stepIdx, setStepIdx] = useState(2) // default 10 min
+  const locked = useEvents((s) => s.isTrackLocked(track.id, now))
+  const cooldownMs = useEvents((s) => s.getCooldownRemainingMs(track.id, now))
+  const inCooldown = cooldownMs > 0
 
-  // ensure ticker is running while this screen is open
   useEffect(() => {
     startTicker()
   }, [startTicker])
 
-  // local re-render ticker (UI only). money ticking is handled by store.
   useEffect(() => {
     const t = setInterval(() => {
       const n = Date.now()
       setNow(n)
-      // keep store ticking even if caller forgot to startTicker (safe: tickOnce is cheap)
       tickOnce(n)
     }, 1000)
     return () => clearInterval(t)
@@ -98,7 +98,9 @@ export default function TrackEvents(props: { track: TrackLike }) {
           <View style={styles.eventStatusPill}>
             <Text style={styles.eventStatusText}>
               {!active
-                ? 'Ready'
+                ? inCooldown
+                  ? `Cooldown • ${formatCountdown(cooldownMs)}`
+                  : 'Ready'
                 : endsInMs > 0
                   ? `Running • ${formatCountdown(endsInMs)}`
                   : 'Finishing'}
@@ -152,7 +154,7 @@ export default function TrackEvents(props: { track: TrackLike }) {
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.bigIncome}>
                   + {formatMoney(Math.round(active.earntLastTick))}{' '}
-                  {' /s  \ttotal: ' + active.total.toLocaleString()}
+                  {' /s  \ttotal: ' + formatMoney(Math.round(active.total)).toLocaleString()}
                 </Text>
               </View>
             </View>
@@ -165,9 +167,16 @@ export default function TrackEvents(props: { track: TrackLike }) {
 
             <Pressable
               onPress={onRun}
-              style={({ pressed }) => [styles.runBtn, pressed && styles.pressed]}
+              disabled={locked}
+              style={({ pressed }) => [
+                styles.runBtn,
+                locked && styles.runBtnDisabled,
+                pressed && !locked && styles.pressed,
+              ]}
             >
-              <Text style={styles.runBtnText}>Run</Text>
+              <Text style={[styles.runBtnText, locked && styles.runBtnTextDisabled]}>
+                {inCooldown ? formatCountdown(cooldownMs) : 'Run'}
+              </Text>
             </Pressable>
           </View>
         )}
@@ -284,4 +293,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stopBtnText: { color: 'rgba(255,255,255,0.85)', fontWeight: '900', fontSize: 16 },
+  runBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  runBtnTextDisabled: {
+    color: 'rgba(255,255,255,0.75)',
+  },
 })
