@@ -73,6 +73,7 @@ export default function MapTrackDetail() {
             maxCapacity={track.maxCapacity}
             entertainment={track.entertainment}
             maxEntertainment={track.maxEntertainment}
+            trackSize={track.trackSize}
           />
         )}
       </View>

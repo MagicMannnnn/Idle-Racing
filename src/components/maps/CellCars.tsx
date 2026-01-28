@@ -1,37 +1,31 @@
 import React from 'react'
 import { View, StyleSheet } from 'react-native'
 import type { Car } from './useTrackCars'
+import { mulberry32 } from './utils'
 
 type Props = {
   cars: Car | Car[]
+  multiplier?: number
+  seed?: number
 }
 
-function directionRotation(dir: Car['dir']) {
-  switch (dir) {
-    case 'N':
-      return [{ rotate: '0deg' }]
-    case 'E':
-      return [{ rotate: '90deg' }]
-    case 'S':
-      return [{ rotate: '180deg' }]
-    case 'W':
-      return [{ rotate: '270deg' }]
-  }
-}
+const PALETTE = [
+  '#ff595e',
+  '#ffca3a',
+  '#8ac926',
+  '#1982c4',
+  '#6a4c93',
+  '#118ab2',
+  '#ef476f',
+  '#ffd166',
+  '#073b4c',
+]
 
-function directionStyle(dir: Car['dir']) {
-  switch (dir) {
-    case 'N':
-    case 'S':
-      return { width: 6, height: 10 }
-    case 'E':
-    case 'W':
-      return { width: 10, height: 6 }
-  }
-}
-
-export function CellCars({ cars: car }: Props) {
+export function CellCars({ cars: car, multiplier = 1, seed = 12345 }: Props) {
   const cars = Array.isArray(car) ? car : [car]
+  const rand = mulberry32(seed)
+
+  const colors = cars.map((c) => PALETTE[Math.floor(mulberry32(seed * c.id)() * PALETTE.length)])
 
   return (
     <View pointerEvents="none" style={styles.container}>
@@ -40,9 +34,14 @@ export function CellCars({ cars: car }: Props) {
           key={i}
           style={[
             styles.car,
+            { backgroundColor: colors[i] },
             {
               // slight offset so multiple cars don't overlap perfectly
-              transform: [...directionRotation(c.dir), { translateY: -i * 2 }],
+              transform: [
+                { translateY: -i * 2 + c.dy * multiplier },
+                { translateX: c.dx * multiplier },
+                { rotate: `${c.rotDeg}deg` },
+              ],
             },
           ]}
         />
@@ -56,7 +55,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10, // above standIcon
+    zIndex: 20,
   },
 
   car: {
@@ -64,5 +63,6 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 2,
     backgroundColor: '#e63946',
+    zIndex: 20,
   },
 })

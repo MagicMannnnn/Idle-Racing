@@ -25,6 +25,7 @@ type Props = {
   maxCapacity: number
   entertainment?: number
   maxEntertainment?: number
+  trackSize: number
 }
 
 const GRID_GAP = 1
@@ -154,6 +155,7 @@ export function TrackMapEventLiveView({
   maxCapacity,
   entertainment,
   maxEntertainment,
+  trackSize,
 }: Props) {
   const ensure = useTrackMaps((s) => s.ensure)
   const grid = useTrackMaps((s) => s.get(trackId))
@@ -164,6 +166,7 @@ export function TrackMapEventLiveView({
   const { cars, start, stop } = useTrackCars({
     loop: buildTrackLoop(grid?.cells ?? [], grid?.size ?? initialGridSize),
     width: grid?.size ?? initialGridSize,
+    carCount: Math.min(grid?.cells.length ?? 0, trackSize),
   })
 
   const [now, setNow] = useState(() => Date.now())
@@ -485,6 +488,7 @@ export function TrackMapEventLiveView({
                 height: cellPx,
                 marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
                 marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+                overflow: 'visible',
               },
               type === 'empty' && styles.empty,
               type === 'infield' && styles.infield,
@@ -520,7 +524,13 @@ export function TrackMapEventLiveView({
             )}
 
             {/* Car */}
-            {carsInCell && <CellCars cars={carsInCell} />}
+            {carsInCell && (
+              <CellCars
+                cars={carsInCell}
+                multiplier={(cellPx + GRID_GAP) / 2}
+                seed={fnv1a32(trackId)}
+              />
+            )}
           </View>
         )
       })}
