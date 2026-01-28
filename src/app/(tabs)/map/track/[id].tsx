@@ -71,6 +71,8 @@ export default function MapTrackDetail() {
             initialGridSize={initialGridSize}
             capacity={track.capacity}
             maxCapacity={track.maxCapacity}
+            entertainment={track.entertainment}
+            maxEntertainment={track.maxEntertainment}
           />
         )}
       </View>

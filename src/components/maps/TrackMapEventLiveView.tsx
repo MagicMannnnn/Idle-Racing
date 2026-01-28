@@ -11,6 +11,9 @@ import {
   angleFromDelta,
   angleFromOrthSum,
 } from './utils'
+import { useEvents } from '@/src/state/useEvents'
+import { StandIcon } from './StandIcon'
+import { useTracks } from '@/src/state/useTracks'
 
 type Props = {
   trackId: string
@@ -18,6 +21,8 @@ type Props = {
   initialGridSize?: number
   capacity: number
   maxCapacity: number
+  entertainment?: number
+  maxEntertainment?: number
 }
 
 const GRID_GAP = 1
@@ -145,9 +150,14 @@ export function TrackMapEventLiveView({
   initialGridSize = 5,
   capacity,
   maxCapacity,
+  entertainment,
+  maxEntertainment,
 }: Props) {
   const ensure = useTrackMaps((s) => s.ensure)
   const grid = useTrackMaps((s) => s.get(trackId))
+  const eventInProgress = useEvents((s) => s.getActive(trackId))
+  const entertainmentValue =
+    eventInProgress && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
 
   useEffect(() => {
     ensure(trackId, initialGridSize)
@@ -457,15 +467,17 @@ export function TrackMapEventLiveView({
               : null}
 
             {/* Stands */}
-            {showStand ? (
-              <View style={[styles.standIcon, { transform: [{ rotate: standRotation }] }]}>
-                <View style={styles.standBar} />
-                <View style={styles.standBar} />
-                <View style={styles.standBar} />
-                {/* removed the “thick darker line” -> same as normal bars */}
-                <View style={styles.standBar} />
-              </View>
-            ) : null}
+            {showStand && (
+              <StandIcon
+                standRotation={standRotation}
+                seed={fnv1a32(trackId + i)}
+                minDotsPerBar={
+                  entertainmentValue == 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
+                }
+                entertainmentValue={entertainmentValue}
+                size={Math.max(cellPx * 0.1, 6)}
+              />
+            )}
           </View>
         )
       })}
@@ -493,18 +505,6 @@ const styles = StyleSheet.create({
   empty: { backgroundColor: '#FFFFFF' },
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
   track: { backgroundColor: 'rgba(20, 20, 20, 0.18)' },
-
-  // ---------- Stands ----------
-  standIcon: {
-    width: '72%',
-    height: '58%',
-    justifyContent: 'space-between',
-  },
-  standBar: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
 
   // ---------- Outer kerbs (edge strips) ----------
   kerbStrip: {

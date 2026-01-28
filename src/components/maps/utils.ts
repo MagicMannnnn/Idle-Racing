@@ -93,6 +93,16 @@ function angleFromOrthSum(sumX: number, sumY: number) {
   return angleFromDelta(dx, dy)
 }
 
+// Deterministic-ish RNG from a seed (so dots don’t reshuffle on every render)
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5)
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 export {
   fnv1a32,
   mix32,
@@ -103,4 +113,5 @@ export {
   angleFromDelta,
   angleFromVector4,
   angleFromOrthSum,
+  mulberry32,
 }
