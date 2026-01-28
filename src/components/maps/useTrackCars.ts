@@ -199,7 +199,7 @@ export function useTrackCars({
       minSpeedAdv: 0.2,
       overtakeBoost: 1.1,
 
-      laneOffset: 0.75,
+      laneOffset: 0.45,
       laneEaseOut: 2.0,
       laneEaseBack: 1.0,
       laneHold: 0.0,
