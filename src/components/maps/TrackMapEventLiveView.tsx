@@ -488,7 +488,6 @@ export function TrackMapEventLiveView({
                 height: cellPx,
                 marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
                 marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
-                overflow: 'visible',
               },
               type === 'empty' && styles.empty,
               type === 'infield' && styles.infield,
@@ -557,7 +556,7 @@ const styles = StyleSheet.create({
 
   empty: { backgroundColor: '#FFFFFF' },
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
-  track: { backgroundColor: 'rgba(20, 20, 20, 0.18)' },
+  track: { backgroundColor: 'rgba(20, 20, 20, 0.18)', overflow: 'visible' },
 
   // ---------- Outer kerbs (edge strips) ----------
   kerbStrip: {
