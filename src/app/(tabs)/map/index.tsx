@@ -102,8 +102,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F6F7FB',
   },
-
-  // New top row layout
   topRow: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -239,7 +237,6 @@ const styles = StyleSheet.create({
     color: 'rgba(11,15,20,0.65)',
   },
 
-  // Modal styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',

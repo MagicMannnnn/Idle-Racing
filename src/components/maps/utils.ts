@@ -68,17 +68,17 @@ function angleFromVector4(vx: number, vy: number) {
   const ny = vy / mag
 
   const dirs = [
-    { dx: 0, dy: -1, a: angleFromDelta(0, -1) }, // N
-    { dx: 1, dy: 0, a: angleFromDelta(1, 0) }, // E
-    { dx: 0, dy: 1, a: angleFromDelta(0, 1) }, // S
-    { dx: -1, dy: 0, a: angleFromDelta(-1, 0) }, // W
+    { dx: 0, dy: -1, a: angleFromDelta(0, -1) },
+    { dx: 1, dy: 0, a: angleFromDelta(1, 0) },
+    { dx: 0, dy: 1, a: angleFromDelta(0, 1) },
+    { dx: -1, dy: 0, a: angleFromDelta(-1, 0) },
   ] as const
 
   let bestAngle: string = dirs[0].a
   let bestDot = -Infinity
 
   for (const d of dirs) {
-    const dot = nx * d.dx + ny * d.dy // already unit vectors
+    const dot = nx * d.dx + ny * d.dy
     if (dot > bestDot) {
       bestDot = dot
       bestAngle = d.a
@@ -89,13 +89,11 @@ function angleFromVector4(vx: number, vy: number) {
 }
 
 function angleFromOrthSum(sumX: number, sumY: number) {
-  // If both components exist, this is a diagonal -> use it (non-90°)
   const dx = sign(sumX)
   const dy = sign(sumY)
   return angleFromDelta(dx, dy)
 }
 
-// Deterministic-ish RNG from a seed (so dots don’t reshuffle on every render)
 function mulberry32(seed: number) {
   return function () {
     let t = (seed += 0x6d2b79f5)
@@ -114,13 +112,11 @@ function buildTrackLoop(cells: CellType[], width: number): number[] {
   const idx = (r: number, c: number) => r * width + c
   const inBounds = (r: number, c: number) => r >= 0 && c >= 0 && r < height && c < width
   const isTrack = (r: number, c: number) => inBounds(r, c) && cells[idx(r, c)] === 'track'
-
-  // 4-way movement (order only matters when ambiguous)
   const dirs = [
-    [0, 1], // right
-    [1, 0], // down
-    [0, -1], // left
-    [-1, 0], // up
+    [0, 1],
+    [1, 0],
+    [0, -1],
+    [-1, 0],
   ] as const
 
   const trackIndices: number[] = []
@@ -128,9 +124,6 @@ function buildTrackLoop(cells: CellType[], width: number): number[] {
     if (cells[i] === 'track') trackIndices.push(i)
   }
   if (trackIndices.length === 0) return []
-
-  // Prefer a "clean loop" start: a track tile with exactly 2 track neighbours.
-  // Fallback: first track tile found.
   const degree2Starts: number[] = []
   for (const i of trackIndices) {
     const r = Math.floor(i / width)
@@ -149,9 +142,6 @@ function buildTrackLoop(cells: CellType[], width: number): number[] {
 
   let current = start
   let prev = -1
-
-  // Hard stop to prevent infinite loops:
-  // A valid single loop should visit each track cell once, then return to start.
   const maxSteps = trackIndices.length + 1
 
   for (let steps = 0; steps < maxSteps; steps++) {
@@ -160,8 +150,6 @@ function buildTrackLoop(cells: CellType[], width: number): number[] {
 
     const r = Math.floor(current / width)
     const c = current % width
-
-    // Collect candidate next neighbours (track + not coming from prev)
     const candidates: number[] = []
     for (const [dr, dc] of dirs) {
       const nr = r + dr
@@ -171,24 +159,17 @@ function buildTrackLoop(cells: CellType[], width: number): number[] {
       if (ni === prev) continue
       candidates.push(ni)
     }
-
-    // If we can close the loop, do it
     if (candidates.includes(start) && visited.size === trackIndices.length) {
       return route
     }
-
-    // Otherwise, pick an unvisited neighbour
     const next = candidates.find((ni) => !visited.has(ni))
     if (next == null) {
-      // Dead end or ambiguous structure (branch/self-cross/revisit)
       return []
     }
 
     prev = current
     current = next
   }
-
-  // If we hit maxSteps, something isn't a single simple loop
   return []
 }
 

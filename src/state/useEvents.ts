@@ -4,26 +4,13 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { useMoney } from '@/src/state/useMoney'
 import { useTracks } from '@/src/state/useTracks'
 
-/**
- * SUPER SIMPLE EVENTS STORE
- * - Only one event type: Track Day
- * - While running OR cooling down: track is locked (no upgrades)
- * - While app open: pays out every second
- * - On reopen: estimates offline earnings (capped by runtime)
- *
- * Earnings model (per second):
- * - attendees: ~ rating^2 * 10 each (randomized)
- * - racers:    ~ rating^3 * 50 each (randomized)
- * People counts are derived from capacity + trackSize (maxCapacity).
- */
-
 export type TrackDayEvent = {
   trackId: string
   startedAt: number
   endsAt: number
   lastTickAt: number
   runtimeMs: number
-  carry: number // fractional money buffer
+  carry: number
   seed: number
   earntLastTick: number
   total: number
@@ -80,24 +67,21 @@ function getTrack(trackId: string) {
   if (!t) return null
   return {
     capacity: t.capacity,
-    trackSize: t.maxCapacity, // treat maxCapacity as size for now
+    trackSize: t.maxCapacity,
     rating: t.rating,
   }
 }
 
 function cooldownForRuntime(runtimeMs: number) {
-  // simple: 20% of runtime, min 10s, max 1h
   return clamp(Math.round(runtimeMs * 0.2), 10_000, 60 * 60 * 1000)
 }
 
 function peopleCounts(capacity: number, trackSize: number, rng: () => number) {
-  // attendees roughly tied to capacity
-  const attBase = capacity * (0.35 + rng() * 0.55) // 35%..90%
+  const attBase = capacity * (0.35 + rng() * 0.55)
   const attendees = Math.max(0, Math.round(attBase))
 
-  // racers tied to trackSize but bounded by capacity
   const sizeN = clamp(trackSize / 250, 0.3, 2.5)
-  const racersBase = capacity * (0.05 + rng() * 0.25) * sizeN // 5%..30% * size factor
+  const racersBase = capacity * (0.05 + rng() * 0.25) * sizeN
   const racers = clamp(
     Math.round(racersBase),
     0,
@@ -114,12 +98,10 @@ function earningsPerSecond(capacity: number, trackSize: number, rating: number, 
 
   const attendeeMean = rating ** 3 * 10
   const racerMean = rating ** 2 * 50
-
-  // randomize around mean (about ±25%)
   const attendeeMult = 0.75 + rng() * 0.5
   const racerMult = 0.75 + rng() * 0.5
 
-  const perSec = (attendees * attendeeMean * attendeeMult + racers * racerMean * racerMult) / 60 // treat the formulas as "per minute" -> pay per second
+  const perSec = (attendees * attendeeMean * attendeeMult + racers * racerMean * racerMult) / 60
 
   return { perSec, nextSeed: nextSeed(seed) }
 }
@@ -128,7 +110,7 @@ function simulate(event: TrackDayEvent, now: number) {
   const t = getTrack(event.trackId)
   if (!t) return { next: event, creditedInt: 0 }
 
-  const creditEnd = Math.min(now, event.endsAt) // offline capped by endsAt (runtime)
+  const creditEnd = Math.min(now, event.endsAt)
   const seconds = Math.max(0, Math.floor((creditEnd - event.lastTickAt) / 1000))
   if (seconds <= 0) return { next: event, creditedInt: 0 }
 
@@ -208,7 +190,6 @@ export const useEvents = create<EventsState>()(
         if (!e) return { ok: false as const, reason: 'not_running' }
 
         const now = Date.now()
-        // simulate up to now before stopping
         const res = simulate(e, now)
 
         const cdMs = cooldownForRuntime(e.runtimeMs)
@@ -221,18 +202,14 @@ export const useEvents = create<EventsState>()(
           }
         })
 
-        // if we advanced lastTickAt internally, we already credited money inside simulate()
         void res
 
         return { ok: true as const }
       },
 
       startTicker: () => {
-        // simplest: one global interval stored on globalThis to avoid extra store fields/types
         const g = globalThis as any
         if (g.__eventsTickerId) return
-
-        // reconcile once
         get().tickOnce(Date.now())
 
         g.__eventsTickerId = setInterval(() => {
@@ -263,8 +240,6 @@ export const useEvents = create<EventsState>()(
         for (const trackId of ids) {
           const e = active[trackId]
           if (!e) continue
-
-          // offline capped to runtime via endsAt
           const res = simulate(e, now)
           nextActive[trackId] = res.next
           changed =

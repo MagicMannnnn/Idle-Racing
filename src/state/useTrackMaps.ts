@@ -5,8 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 export type CellType = 'empty' | 'track' | 'infield' | 'stand'
 
 export type TrackGrid = {
-  size: number // NxN
-  // row-major: index = y * size + x
+  size: number
   cells: CellType[]
   updatedAt: number
 }
@@ -14,33 +13,19 @@ export type TrackGrid = {
 export type TrackMapState = {
   byTrackId: Record<string, TrackGrid | undefined>
 
-  // selectors / getters
   get: (trackId: string) => TrackGrid | undefined
 
-  // init / sizing
   ensure: (trackId: string, size?: number) => void
-  setSize: (trackId: string, size: number) => void // regenerates default oval
+  setSize: (trackId: string, size: number) => void
 
-  // editing helpers
   setCell: (trackId: string, x: number, y: number, type: CellType) => void
-
-  // NEW: commit full grid at once (editor save)
   setCells: (trackId: string, cells: CellType[]) => void
 
-  clear: (trackId: string) => void // regenerates default oval
+  clear: (trackId: string) => void
 
   resetAll: () => void
 }
 
-/**
- * Generates a simple oval "ring" track:
- * - outside: empty
- * - ring: track
- * - inside: infield
- *
- * Stand placement is NOT auto-done here.
- * Stands should only ever be placed on 'empty' cells (free spaces).
- */
 export function generateDefaultOval(size: number): TrackGrid {
   const cells: CellType[] = new Array(size * size).fill('empty')
 
@@ -105,8 +90,6 @@ export const useTrackMaps = create<TrackMapState>()(
 
         const idx = y * grid.size + x
         const next = grid.cells.slice()
-
-        // keep your existing invariant for single-cell edits
         if (type === 'stand' && next[idx] !== 'empty') return
 
         next[idx] = type
@@ -119,14 +102,10 @@ export const useTrackMaps = create<TrackMapState>()(
         }))
       },
 
-      // ✅ NEW: commit full grid exactly as provided (no “corrections” based on old grid)
       setCells: (trackId, cells) => {
         const grid = get().byTrackId[trackId]
         if (!grid) return
         if (cells.length !== grid.size * grid.size) return
-
-        // Optional: ensure stand only appears on empty IN THE PROVIDED CELLS.
-        // (Viewer expects stands only live on empty.)
         const next = cells.slice()
         for (let i = 0; i < next.length; i++) {
           if (next[i] === 'stand') next[i] = 'empty'

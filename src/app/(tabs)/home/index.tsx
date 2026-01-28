@@ -74,7 +74,6 @@ export default function TracksIndex() {
 
   return (
     <View style={styles.screen}>
-      {/* Title row with Buy button on the right */}
       <View style={styles.topRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Tracks</Text>
@@ -134,7 +133,6 @@ export default function TracksIndex() {
         }
       />
 
-      {/* Buy modal */}
       <Modal visible={buyOpen} transparent animationType="fade" onRequestClose={onCancelBuy}>
         <Pressable style={styles.modalBackdrop} onPress={onCancelBuy}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -187,8 +185,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F6F7FB',
   },
-
-  // New top row layout
   topRow: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -324,7 +320,6 @@ const styles = StyleSheet.create({
     color: 'rgba(11,15,20,0.65)',
   },
 
-  // Modal styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',

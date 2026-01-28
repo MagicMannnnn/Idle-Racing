@@ -78,7 +78,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
 
   const onRun = () => {
     const res = startTrackDay(track.id, runtimeMs)
-    // ignore errors in UI for now (already running / track not found)
     void res
   }
 
@@ -116,7 +115,7 @@ export default function TrackEvents(props: { track: TrackLike }) {
         >
           {STEPS_MIN.map((m, i) => {
             const activeStep = i === stepIdx
-            const disabled = running // lock runtime choice while running
+            const disabled = running
             return (
               <Pressable
                 key={`track_day_${m}`}
@@ -194,7 +193,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
-  // Match your dark card styling
   card: {
     borderRadius: 18,
     padding: 14,

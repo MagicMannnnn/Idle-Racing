@@ -3,16 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 type Dir = 'N' | 'E' | 'S' | 'W'
 
 export type Car = {
-  id: number // ✅ stable unique car ID
-  index: number // current tile index (1D)
-  dir: Dir // exit direction for this segment (useful for logic)
-  dx: number // normalized [-1..+1]
-  dy: number // normalized [-1..+1]
-  rotDeg: number // smooth heading in degrees (0=N, 90=E, 180=S, 270=W)
+  id: number
+  index: number
+  dir: Dir
+  dx: number
+  dy: number
+  rotDeg: number
 }
 
 type UseTrackCarsOpts = {
-  loop: number[] // ordered track loop (no duplicate end)
+  loop: number[]
   width: number
   carCount?: number
   stepMs?: number
@@ -62,23 +62,17 @@ function isCorner(a: Dir, b: Dir) {
 
 type CarState = {
   id: number
-  pos: number // index INTO loop
+  pos: number
 }
 
 export function useTrackCars({ loop, width, carCount = 1, stepMs = 500 }: UseTrackCarsOpts) {
   const safeCarCount = Math.min(carCount, loop.length)
-
-  // ✅ stable id generator (does not change across renders)
   const nextIdRef = useRef(1)
 
   const makeCar = useCallback((pos: number): CarState => ({ id: nextIdRef.current++, pos }), [])
-
-  // ✅ store id + pos together so id is stable while pos changes
   const [carsState, setCarsState] = useState<CarState[]>(() =>
     Array.from({ length: safeCarCount }, (_, i) => ({ id: i + 1, pos: i })),
   )
-
-  // ensure id counter starts above initial ids
   useEffect(() => {
     nextIdRef.current = Math.max(nextIdRef.current, safeCarCount + 1)
   }, [safeCarCount])
@@ -223,15 +217,11 @@ export function useTrackCars({ loop, width, carCount = 1, stepMs = 500 }: UseTra
 
   const getCars = useCallback(() => carsRef.current, [])
 
-  // Reset cars if loop or count changes:
-  // policy: regenerate cars + ids (stable during a run, new when configuration changes)
   useEffect(() => {
-    // reset id generator
     nextIdRef.current = 1
     setCarsState(Array.from({ length: safeCarCount }, (_, i) => makeCar(i)))
     setT(0)
     tickStartedAtRef.current = performance.now()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safeCarCount, loop.join('|')])
 
   useEffect(() => stop, [stop])

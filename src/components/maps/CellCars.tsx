@@ -36,7 +36,6 @@ export function CellCars({ cars: car, multiplier = 1, seed = 12345 }: Props) {
             styles.car,
             { backgroundColor: colors[i] },
             {
-              // slight offset so multiple cars don't overlap perfectly
               transform: [
                 { translateY: -i * 2 + c.dy * multiplier },
                 { translateX: c.dx * multiplier },
