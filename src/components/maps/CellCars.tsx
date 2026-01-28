@@ -1,18 +1,19 @@
-import React from 'react'
-import { View, StyleSheet } from 'react-native'
-import type { Car } from './useTrackCars'
+import React, { useMemo } from 'react'
+import { StyleSheet } from 'react-native'
+import Animated, { useAnimatedStyle } from 'react-native-reanimated'
+import type { CarAnim } from './useTrackCars'
 import { mulberry32 } from './utils'
 
 type Props = {
-  cars: Car | Car[]
-  multiplier?: number
+  cars: CarAnim[]
   seed?: number
+  carW?: number
+  carH?: number
 }
 
 const PALETTE = [
   '#ff595e',
   '#ffca3a',
-  '#8ac926',
   '#1982c4',
   '#6a4c93',
   '#118ab2',
@@ -21,47 +22,60 @@ const PALETTE = [
   '#073b4c',
 ]
 
-export function CellCars({ cars: car, multiplier = 1, seed = 12345 }: Props) {
-  const cars = Array.isArray(car) ? car : [car]
-  const rand = mulberry32(seed)
-
-  const colors = cars.map((c) => PALETTE[Math.floor(mulberry32(seed * c.id)() * PALETTE.length)])
+function CarView({
+  car,
+  color,
+  carW,
+  carH,
+}: {
+  car: CarAnim
+  color: string
+  carW: number
+  carH: number
+}) {
+  const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    transform: [
+      { translateX: car.x.value - carW / 2 },
+      { translateY: car.y.value - carH / 2 },
+      { rotate: `${car.rotDeg.value}deg` },
+    ],
+  }))
 
   return (
-    <View pointerEvents="none" style={styles.container}>
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.car, { width: carW, height: carH, backgroundColor: color }, style]}
+    />
+  )
+}
+
+export function CellCars({ cars, seed = 12345, carW = 6, carH = 10 }: Props) {
+  const colors = useMemo(
+    () =>
+      cars.map((c) => {
+        const r = mulberry32(((seed ^ c.id) >>> 0) as number)()
+        return PALETTE[Math.floor(r * PALETTE.length)]
+      }),
+    [cars, seed],
+  )
+
+  return (
+    <Animated.View pointerEvents="none" style={styles.overlay}>
       {cars.map((c, i) => (
-        <View
-          key={i}
-          style={[
-            styles.car,
-            { backgroundColor: colors[i] },
-            {
-              transform: [
-                { translateY: -i * 2 + c.dy * multiplier },
-                { translateX: c.dx * multiplier },
-                { rotate: `${c.rotDeg}deg` },
-              ],
-            },
-          ]}
-        />
+        <CarView key={c.id} car={c} color={colors[i]} carW={carW} carH={carH} />
       ))}
-    </View>
+    </Animated.View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 20,
+    zIndex: 9999,
+    elevation: 9999,
   },
-
   car: {
-    width: 6,
-    height: 10,
     borderRadius: 2,
-    backgroundColor: '#e63946',
-    zIndex: 20,
   },
 })

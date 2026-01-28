@@ -16,6 +16,7 @@ import { useEvents } from '@/src/state/useEvents'
 import { StandIcon } from './StandIcon'
 import { useTrackCars } from './useTrackCars'
 import { CellCars } from './CellCars'
+import { useIsFocused } from '@react-navigation/native'
 
 type Props = {
   trackId: string
@@ -30,9 +31,13 @@ type Props = {
 
 const GRID_GAP = 1
 const GRID_PAD = 1
+
+// ----------------- Kerb helpers -----------------
 type Side = 'N' | 'E' | 'S' | 'W'
 type KerbSides = { N?: boolean; E?: boolean; S?: boolean; W?: boolean }
 type InnerCorner = 'NE' | 'SE' | 'SW' | 'NW'
+
+// Outer kerbs only live on track tiles
 type TrackKerb = { outer: KerbSides }
 
 function KerbStrip({ side }: { side: Side }) {
@@ -46,6 +51,7 @@ function KerbStrip({ side }: { side: Side }) {
     <View pointerEvents="none" style={wrapStyle}>
       {Array.from({ length: stripes }).map((_, i) => (
         <View
+          // eslint-disable-next-line react/no-array-index-key
           key={`${side}_${i}`}
           style={[
             styles.kerbStripe,
@@ -66,7 +72,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
   const stripes = 6
 
   const INSET = 0
-
   const BOX = '56%' as const
 
   const isTop = corner === 'NE' || corner === 'NW'
@@ -113,6 +118,7 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       <View pointerEvents="none" style={hLegStyle}>
         {Array.from({ length: stripes }).map((_, i) => (
           <View
+            // eslint-disable-next-line react/no-array-index-key
             key={`ch_${corner}_${i}`}
             style={[
               styles.kerbStripe,
@@ -126,6 +132,7 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       <View pointerEvents="none" style={vLegStyle}>
         {Array.from({ length: stripes }).map((_, i) => (
           <View
+            // eslint-disable-next-line react/no-array-index-key
             key={`cv_${corner}_${i}`}
             style={[
               styles.kerbStripe,
@@ -151,15 +158,10 @@ export function TrackMapEventLiveView({
 }: Props) {
   const ensure = useTrackMaps((s) => s.ensure)
   const grid = useTrackMaps((s) => s.get(trackId))
+
   const eventInProgress = !!useEvents((s) => s.getActive(trackId))
   const entertainmentValue =
     eventInProgress && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
-
-  const { cars, start, stop } = useTrackCars({
-    loop: buildTrackLoop(grid?.cells ?? [], grid?.size ?? initialGridSize),
-    width: grid?.size ?? initialGridSize,
-    carCount: Math.min(grid?.cells.length ?? 0, trackSize),
-  })
 
   const [now, setNow] = useState(() => Date.now())
 
@@ -168,7 +170,9 @@ export function TrackMapEventLiveView({
 
   const cooldownMs = useEvents((s) => s.getCooldownRemainingMs(trackId, now))
   const inCooldown = cooldownMs > 0
-  const showCars = eventInProgress && !inCooldown
+  const showCars = eventInProgress || inCooldown
+
+  const isFocused = useIsFocused()
 
   useEffect(() => {
     startTicker()
@@ -184,15 +188,6 @@ export function TrackMapEventLiveView({
   }, [tickOnce])
 
   useEffect(() => {
-    if (!showCars) {
-      stop()
-    } else {
-      start()
-    }
-    return stop
-  }, [start, stop, showCars])
-
-  useEffect(() => {
     ensure(trackId, initialGridSize)
   }, [ensure, trackId, initialGridSize])
 
@@ -205,6 +200,26 @@ export function TrackMapEventLiveView({
   }, [sizePx, mapSize])
 
   const wrapW = cellPx * mapSize + GRID_GAP * (mapSize - 1) + GRID_PAD * 2
+
+  const loop = useMemo(() => {
+    return buildTrackLoop(cells ?? [], mapSize)
+  }, [cells, mapSize])
+
+  // ✅ IMPORTANT: cars are now rendered ONCE as an overlay, not per-cell
+  const { cars, start, stop } = useTrackCars({
+    loop,
+    width: mapSize,
+    carCount: Math.min(trackSize, Math.floor(loop.length * 0.5)),
+    cellPx,
+    gapPx: GRID_GAP,
+    padPx: GRID_PAD,
+  })
+
+  useEffect(() => {
+    if (!showCars || !isFocused) stop()
+    else start()
+    return stop
+  }, [showCars, isFocused, start, stop])
 
   const standSet = useMemo(() => {
     if (!cells.length) return new Set<number>()
@@ -231,6 +246,8 @@ export function TrackMapEventLiveView({
     for (let i = 0; i < k; i++) set.add(scored[i].idx)
     return set
   }, [cells, trackId, capacity, maxCapacity, mapSize])
+
+  // UPDATED: average direction over orth adjacency (robust choice)
   const standFacingByIndex = useMemo(() => {
     const map = new Map<number, string>()
     if (!cells.length || standSet.size === 0) return map
@@ -247,13 +264,6 @@ export function TrackMapEventLiveView({
       if (cells[i] === 'track') tracksAll.push(toXY(i, mapSize))
     if (tracksAll.length === 0) return map
 
-    const orth4 = [
-      { dx: 0, dy: -1 },
-      { dx: 1, dy: 0 },
-      { dx: 0, dy: 1 },
-      { dx: -1, dy: 0 },
-    ] as const
-
     for (const idx of standSet) {
       const s = toXY(idx, mapSize)
 
@@ -264,12 +274,14 @@ export function TrackMapEventLiveView({
 
       const nsOnly = hasN && hasS && !hasE && !hasW
       const ewOnly = hasE && hasW && !hasN && !hasS
+
       if (nsOnly || ewOnly) {
         const pickFirst = (mix32(fnv1a32(trackId) ^ idx) & 1) === 0
         if (nsOnly) map.set(idx, pickFirst ? angleFromDelta(0, -1) : angleFromDelta(0, 1))
         else map.set(idx, pickFirst ? angleFromDelta(1, 0) : angleFromDelta(-1, 0))
         continue
       }
+
       let sumX = 0
       let sumY = 0
       let count = 0
@@ -306,6 +318,8 @@ export function TrackMapEventLiveView({
         }
         continue
       }
+
+      // fallback: nearest track
       let bestD2 = Number.POSITIVE_INFINITY
       let bestDx = 0
       let bestDy = 0
@@ -324,7 +338,7 @@ export function TrackMapEventLiveView({
     }
 
     return map
-  }, [cells, mapSize, standSet])
+  }, [cells, mapSize, standSet, trackId])
 
   const trackKerbsByIndex = useMemo(() => {
     const map = new Map<number, TrackKerb>()
@@ -340,6 +354,7 @@ export function TrackMapEventLiveView({
     const isEmpty = (x: number, y: number) => cellAt(x, y) === 'empty'
 
     const nearCornerIdx = new Set<number>()
+
     for (let y = 0; y < mapSize; y++) {
       for (let x = 0; x < mapSize; x++) {
         if (!isTrack(x, y)) continue
@@ -395,6 +410,7 @@ export function TrackMapEventLiveView({
     }
     const isTrack = (x: number, y: number) => cellAt(x, y) === 'track'
 
+    // suppress inside kerbs near outside kerbs
     const suppressed = new Set<number>()
     for (const [idx, kerb] of trackKerbsByIndex.entries()) {
       const { x, y } = toXY(idx, mapSize)
@@ -406,7 +422,6 @@ export function TrackMapEventLiveView({
 
     const pushUnique = (idx: number, c: InnerCorner) => {
       if (suppressed.has(idx)) return
-
       const arr = map.get(idx)
       if (!arr) {
         map.set(idx, [c])
@@ -436,76 +451,74 @@ export function TrackMapEventLiveView({
   }, [cells, mapSize, trackKerbsByIndex])
 
   return (
-    <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
-      {Array.from({ length: mapSize * mapSize }).map((_, i) => {
-        const x = i % mapSize
-        const y = Math.floor(i / mapSize)
+    <View style={{ width: wrapW, height: wrapW, alignSelf: 'center' }}>
+      <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
+        {Array.from({ length: mapSize * mapSize }).map((_, i) => {
+          const x = i % mapSize
+          const y = Math.floor(i / mapSize)
 
-        const type = cells[i] ?? 'empty'
+          const type = cells[i] ?? 'empty'
 
-        const carsInCell = showCars && cars.filter((c) => c.index === i)
+          const showStand = type === 'empty' && standSet.has(i)
+          const standRotation = showStand
+            ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
+            : '0deg'
 
-        const showStand = type === 'empty' && standSet.has(i)
-        const standRotation = showStand ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180) : '0deg'
+          const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
+          const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
 
-        const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
-        const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
+          return (
+            <View
+              key={`${trackId}_${i}`}
+              style={[
+                styles.cell,
+                {
+                  width: cellPx,
+                  height: cellPx,
+                  marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
+                  marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+                },
+                type === 'empty' && styles.empty,
+                type === 'infield' && styles.infield,
+                type === 'track' && styles.track,
+              ]}
+            >
+              {/* OUTER kerbs only on track tiles */}
+              {type === 'track' && trackKerb ? (
+                <>
+                  {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
+                  {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
+                  {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
+                  {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
+                </>
+              ) : null}
 
-        return (
-          <View
-            key={`${trackId}_${i}`}
-            style={[
-              styles.cell,
-              {
-                width: cellPx,
-                height: cellPx,
-                marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
-                marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
-              },
-              type === 'empty' && styles.empty,
-              type === 'infield' && styles.infield,
-              type === 'track' && styles.track,
-            ]}
-          >
-            {/* OUTER kerbs only on track tiles */}
-            {type === 'track' && trackKerb ? (
-              <>
-                {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
-                {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
-                {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
-                {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
-              </>
-            ) : null}
+              {/* INNER corner kerbs */}
+              {innerCorners?.length
+                ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />)
+                : null}
 
-            {/* INNER corner kerbs */}
-            {innerCorners?.length
-              ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />)
-              : null}
+              {/* Stands */}
+              {showStand && (
+                <StandIcon
+                  standRotation={standRotation}
+                  seed={fnv1a32(trackId + i)}
+                  minDotsPerBar={
+                    entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
+                  }
+                  entertainmentValue={entertainmentValue}
+                  size={Math.max(cellPx * 0.1, 6)}
+                />
+              )}
+            </View>
+          )
+        })}
 
-            {/* Stands */}
-            {showStand && (
-              <StandIcon
-                standRotation={standRotation}
-                seed={fnv1a32(trackId + i)}
-                minDotsPerBar={
-                  entertainmentValue == 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
-                }
-                entertainmentValue={entertainmentValue}
-                size={Math.max(cellPx * 0.1, 6)}
-              />
-            )}
-
-            {/* Car */}
-            {carsInCell && (
-              <CellCars
-                cars={carsInCell}
-                multiplier={(cellPx + GRID_GAP) / 2}
-                seed={fnv1a32(trackId)}
-              />
-            )}
-          </View>
-        )
-      })}
+        {/* ✅ Cars are rendered once, as an overlay */}
+        {showCars ? (
+          <CellCars cars={cars} seed={fnv1a32(trackId)} carW={cellPx / 6} carH={cellPx / 4} />
+        ) : null}
+      </View>
     </View>
   )
 }
@@ -517,7 +530,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.10)',
+    backgroundColor: 'rgba(0,0,0,0.10)', // grid lines
   },
 
   cell: {
@@ -531,6 +544,7 @@ const styles = StyleSheet.create({
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
   track: { backgroundColor: 'rgba(20, 20, 20, 0.18)', overflow: 'visible' },
 
+  // ---------- Outer kerbs (edge strips) ----------
   kerbStrip: {
     position: 'absolute',
     overflow: 'hidden',
@@ -552,6 +566,7 @@ const styles = StyleSheet.create({
   kerbLeft: { left: 0 },
   kerbRight: { right: 0 },
 
+  // stripes
   kerbStripe: {},
   kerbStripeH: { flex: 1 },
   kerbStripeV: { flex: 1 },

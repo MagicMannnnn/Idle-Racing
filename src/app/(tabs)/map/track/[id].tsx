@@ -4,12 +4,14 @@ import { TrackMapView } from '@/src/components/maps/TrackMapView'
 import { useTracks } from '@/src/state/useTracks'
 import { useLocalSearchParams, router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function MapTrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const track = useTracks((s) => s.tracks.find((t) => t.id === id))
+
+  const size = Dimensions.get('window').width - 32
 
   const [isEditing, setIsEditing] = useState(false)
 
@@ -60,14 +62,14 @@ export default function MapTrackDetail() {
         {isEditing ? (
           <TrackMapEditor
             trackId={track.id}
-            sizePx={340}
+            sizePx={size}
             initialGridSize={initialGridSize}
             onSaved={() => setIsEditing(false)}
           />
         ) : (
           <TrackMapEventLiveView
             trackId={track.id}
-            sizePx={300}
+            sizePx={size}
             initialGridSize={initialGridSize}
             capacity={track.capacity}
             maxCapacity={track.maxCapacity}
