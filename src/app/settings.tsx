@@ -1,19 +1,24 @@
 import { View, Text, Pressable } from 'react-native'
 import { router } from 'expo-router'
-import { use } from 'react'
 import { useOnboarding } from '../state/useOnboarding'
 import { useMoney } from '../state/useMoney'
 import { useTracks } from '../state/useTracks'
+import { useEvents } from '../state/useEvents'
+import { useTrackMaps } from '../state/useTrackMaps'
 
 export default function SettingsScreen() {
   const resetOnboarding = useOnboarding((s) => s.reset)
   const resetMoney = useMoney((s) => s.reset)
   const resetTracks = useTracks((s) => s.reset)
+  const resetEvents = useEvents((s) => s.reset)
+  const resetMaps = useTrackMaps((s) => s.resetAll)
 
   function handleReset() {
     resetOnboarding()
     resetMoney()
     resetTracks()
+    resetEvents()
+    resetMaps()
     router.replace('/')
   }
 

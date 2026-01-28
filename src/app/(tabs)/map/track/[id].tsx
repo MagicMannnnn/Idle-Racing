@@ -4,7 +4,8 @@ import { TrackMapView } from '@/src/components/maps/TrackMapView'
 import { useTracks } from '@/src/state/useTracks'
 import { useLocalSearchParams, router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function MapTrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()

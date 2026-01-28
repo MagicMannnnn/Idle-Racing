@@ -3,8 +3,9 @@ import { useTracks, type UpgradeMode } from '@/src/state/useTracks'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, Platform, SafeAreaView, ScrollView } from 'react-native'
+import { View, Text, Pressable, StyleSheet, Platform, ScrollView } from 'react-native'
 import TrackEvents from '@/src/components/events/events'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 function formatMoney(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
