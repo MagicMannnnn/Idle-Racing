@@ -332,7 +332,7 @@ function makeTrack(index: number, name: string): Track {
     entertainmentLevel: 1,
     entertainment: 0,
     maxEntertainment: 0,
-    trackSize: (index + 1) * 10,
+    trackSize: (index + 1) * 5,
   }
 
   return recomputeTrack(base)

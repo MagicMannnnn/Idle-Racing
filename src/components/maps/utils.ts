@@ -1,3 +1,5 @@
+import { CellType } from '@/src/state/useTrackMaps'
+
 function fnv1a32(str: string) {
   let h = 0x811c9dc5
   for (let i = 0; i < str.length; i++) {
@@ -103,6 +105,93 @@ function mulberry32(seed: number) {
   }
 }
 
+function buildTrackLoop(cells: CellType[], width: number): number[] {
+  if (width <= 0) return []
+  if (cells.length % width !== 0) return []
+
+  const height = cells.length / width
+
+  const idx = (r: number, c: number) => r * width + c
+  const inBounds = (r: number, c: number) => r >= 0 && c >= 0 && r < height && c < width
+  const isTrack = (r: number, c: number) => inBounds(r, c) && cells[idx(r, c)] === 'track'
+
+  // 4-way movement (order only matters when ambiguous)
+  const dirs = [
+    [0, 1], // right
+    [1, 0], // down
+    [0, -1], // left
+    [-1, 0], // up
+  ] as const
+
+  const trackIndices: number[] = []
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === 'track') trackIndices.push(i)
+  }
+  if (trackIndices.length === 0) return []
+
+  // Prefer a "clean loop" start: a track tile with exactly 2 track neighbours.
+  // Fallback: first track tile found.
+  const degree2Starts: number[] = []
+  for (const i of trackIndices) {
+    const r = Math.floor(i / width)
+    const c = i % width
+    let deg = 0
+    for (const [dr, dc] of dirs) {
+      if (isTrack(r + dr, c + dc)) deg++
+    }
+    if (deg === 2) degree2Starts.push(i)
+  }
+  const start = (degree2Starts.length ? degree2Starts : trackIndices)[0]
+  if (start == null) return []
+
+  const route: number[] = []
+  const visited = new Set<number>()
+
+  let current = start
+  let prev = -1
+
+  // Hard stop to prevent infinite loops:
+  // A valid single loop should visit each track cell once, then return to start.
+  const maxSteps = trackIndices.length + 1
+
+  for (let steps = 0; steps < maxSteps; steps++) {
+    route.push(current)
+    visited.add(current)
+
+    const r = Math.floor(current / width)
+    const c = current % width
+
+    // Collect candidate next neighbours (track + not coming from prev)
+    const candidates: number[] = []
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr
+      const nc = c + dc
+      if (!isTrack(nr, nc)) continue
+      const ni = idx(nr, nc)
+      if (ni === prev) continue
+      candidates.push(ni)
+    }
+
+    // If we can close the loop, do it
+    if (candidates.includes(start) && visited.size === trackIndices.length) {
+      return route
+    }
+
+    // Otherwise, pick an unvisited neighbour
+    const next = candidates.find((ni) => !visited.has(ni))
+    if (next == null) {
+      // Dead end or ambiguous structure (branch/self-cross/revisit)
+      return []
+    }
+
+    prev = current
+    current = next
+  }
+
+  // If we hit maxSteps, something isn't a single simple loop
+  return []
+}
+
 export {
   fnv1a32,
   mix32,
@@ -114,4 +203,5 @@ export {
   angleFromVector4,
   angleFromOrthSum,
   mulberry32,
+  buildTrackLoop,
 }

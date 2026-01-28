@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useTrackMaps } from '@/src/state/useTrackMaps'
 import {
@@ -10,10 +10,12 @@ import {
   addDeg,
   angleFromDelta,
   angleFromOrthSum,
+  buildTrackLoop,
 } from './utils'
 import { useEvents } from '@/src/state/useEvents'
 import { StandIcon } from './StandIcon'
-import { useTracks } from '@/src/state/useTracks'
+import { useTrackCars } from './useTrackCars'
+import { CellCars } from './CellCars'
 
 type Props = {
   trackId: string
@@ -155,9 +157,45 @@ export function TrackMapEventLiveView({
 }: Props) {
   const ensure = useTrackMaps((s) => s.ensure)
   const grid = useTrackMaps((s) => s.get(trackId))
-  const eventInProgress = useEvents((s) => s.getActive(trackId))
+  const eventInProgress = !!useEvents((s) => s.getActive(trackId))
   const entertainmentValue =
     eventInProgress && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
+
+  const { cars, start, stop } = useTrackCars({
+    loop: buildTrackLoop(grid?.cells ?? [], grid?.size ?? initialGridSize),
+    width: grid?.size ?? initialGridSize,
+  })
+
+  const [now, setNow] = useState(() => Date.now())
+
+  const startTicker = useEvents((s) => s.startTicker)
+  const tickOnce = useEvents((s) => s.tickOnce)
+
+  const cooldownMs = useEvents((s) => s.getCooldownRemainingMs(trackId, now))
+  const inCooldown = cooldownMs > 0
+  const showCars = eventInProgress && !inCooldown
+
+  useEffect(() => {
+    startTicker()
+  }, [startTicker])
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      const n = Date.now()
+      setNow(n)
+      tickOnce(n)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [tickOnce])
+
+  useEffect(() => {
+    if (!showCars) {
+      stop()
+    } else {
+      start()
+    }
+    return stop
+  }, [start, stop, showCars])
 
   useEffect(() => {
     ensure(trackId, initialGridSize)
@@ -429,6 +467,8 @@ export function TrackMapEventLiveView({
 
         const type = cells[i] ?? 'empty'
 
+        const carsInCell = showCars && cars.filter((c) => c.index === i)
+
         const showStand = type === 'empty' && standSet.has(i)
         const standRotation = showStand ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180) : '0deg'
 
@@ -478,6 +518,9 @@ export function TrackMapEventLiveView({
                 size={Math.max(cellPx * 0.1, 6)}
               />
             )}
+
+            {/* Car */}
+            {carsInCell && <CellCars cars={carsInCell} />}
           </View>
         )
       })}
