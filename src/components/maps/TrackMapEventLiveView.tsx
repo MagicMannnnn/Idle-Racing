@@ -1,6 +1,18 @@
+// ✅ Fix: remove the extra vertical padding / “mystery space” by:
+// - SafeAreaView edges limited (no huge insets)
+// - ScrollView has flex:1 and NO extra top/bottom padding
+// - contentContainerStyle uses flexGrow:1 + small padding
+// - optional: remove bounce inset padding on iOS via contentInsetAdjustmentBehavior
+
+// (Everything else unchanged)
+
 import React, { useEffect, useMemo, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { ScrollView, StyleSheet, View } from 'react-native'
+import { useIsFocused } from '@react-navigation/native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+
 import { useTrackMaps } from '@/src/state/useTrackMaps'
+import { useEvents } from '@/src/state/useEvents'
 import {
   fnv1a32,
   mix32,
@@ -12,11 +24,10 @@ import {
   angleFromOrthSum,
   buildTrackLoop,
 } from './utils'
-import { useEvents } from '@/src/state/useEvents'
 import { StandIcon } from './StandIcon'
 import { useTrackCars } from './useTrackCars'
 import { CellCars } from './CellCars'
-import { useIsFocused } from '@react-navigation/native'
+import { TrackLeaderboard } from './TrackLeaderboard'
 
 type Props = {
   trackId: string
@@ -64,9 +75,6 @@ function KerbStrip({ side }: { side: Side }) {
   )
 }
 
-/**
- * Inner kerb corner: flush to tile edge (no gap).
- */
 function KerbCorner({ corner }: { corner: InnerCorner }) {
   const thickness = 6
   const stripes = 6
@@ -170,7 +178,9 @@ export function TrackMapEventLiveView({
 
   const cooldownMs = useEvents((s) => s.getCooldownRemainingMs(trackId, now))
   const inCooldown = cooldownMs > 0
-  const showCars = eventInProgress || inCooldown
+
+  const showCarsVisual = eventInProgress || inCooldown
+  const runSim = eventInProgress
 
   const isFocused = useIsFocused()
 
@@ -201,12 +211,9 @@ export function TrackMapEventLiveView({
 
   const wrapW = cellPx * mapSize + GRID_GAP * (mapSize - 1) + GRID_PAD * 2
 
-  const loop = useMemo(() => {
-    return buildTrackLoop(cells ?? [], mapSize)
-  }, [cells, mapSize])
+  const loop = useMemo(() => buildTrackLoop(cells ?? [], mapSize), [cells, mapSize])
 
-  // ✅ IMPORTANT: cars are now rendered ONCE as an overlay, not per-cell
-  const { cars, start, stop } = useTrackCars({
+  const { cars, start, stop, newRace } = useTrackCars({
     loop,
     width: mapSize,
     carCount: Math.min(trackSize, Math.floor(loop.length * 0.5)),
@@ -216,10 +223,22 @@ export function TrackMapEventLiveView({
   })
 
   useEffect(() => {
-    if (!showCars || !isFocused) stop()
-    else start()
+    if (!isFocused || !runSim) {
+      stop()
+      return
+    }
+    start()
     return stop
-  }, [showCars, isFocused, start, stop])
+  }, [isFocused, runSim, start, stop])
+
+  useEffect(() => {
+    if (!runSim) {
+      stop()
+      return
+    }
+    newRace()
+    start()
+  }, [runSim, newRace, start, stop])
 
   const standSet = useMemo(() => {
     if (!cells.length) return new Set<number>()
@@ -247,7 +266,6 @@ export function TrackMapEventLiveView({
     return set
   }, [cells, trackId, capacity, maxCapacity, mapSize])
 
-  // UPDATED: average direction over orth adjacency (robust choice)
   const standFacingByIndex = useMemo(() => {
     const map = new Map<number, string>()
     if (!cells.length || standSet.size === 0) return map
@@ -319,7 +337,6 @@ export function TrackMapEventLiveView({
         continue
       }
 
-      // fallback: nearest track
       let bestD2 = Number.POSITIVE_INFINITY
       let bestDx = 0
       let bestDy = 0
@@ -410,7 +427,6 @@ export function TrackMapEventLiveView({
     }
     const isTrack = (x: number, y: number) => cellAt(x, y) === 'track'
 
-    // suppress inside kerbs near outside kerbs
     const suppressed = new Set<number>()
     for (const [idx, kerb] of trackKerbsByIndex.entries()) {
       const { x, y } = toXY(idx, mapSize)
@@ -451,86 +467,108 @@ export function TrackMapEventLiveView({
   }, [cells, mapSize, trackKerbsByIndex])
 
   return (
-    <View style={{ width: wrapW, height: wrapW, alignSelf: 'center' }}>
-      <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
-        {Array.from({ length: mapSize * mapSize }).map((_, i) => {
-          const x = i % mapSize
-          const y = Math.floor(i / mapSize)
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="never"
+      >
+        {/* Map */}
+        <View style={{ width: wrapW, alignSelf: 'center' }}>
+          <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
+            {Array.from({ length: mapSize * mapSize }).map((_, i) => {
+              const x = i % mapSize
+              const y = Math.floor(i / mapSize)
 
-          const type = cells[i] ?? 'empty'
+              const type = cells[i] ?? 'empty'
 
-          const showStand = type === 'empty' && standSet.has(i)
-          const standRotation = showStand
-            ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
-            : '0deg'
+              const showStand = type === 'empty' && standSet.has(i)
+              const standRotation = showStand
+                ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
+                : '0deg'
 
-          const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
-          const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
+              const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
+              const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
 
-          return (
-            <View
-              key={`${trackId}_${i}`}
-              style={[
-                styles.cell,
-                {
-                  width: cellPx,
-                  height: cellPx,
-                  marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
-                  marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
-                },
-                type === 'empty' && styles.empty,
-                type === 'infield' && styles.infield,
-                type === 'track' && styles.track,
-              ]}
-            >
-              {/* OUTER kerbs only on track tiles */}
-              {type === 'track' && trackKerb ? (
-                <>
-                  {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
-                  {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
-                  {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
-                  {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
-                </>
-              ) : null}
+              return (
+                <View
+                  key={`${trackId}_${i}`}
+                  style={[
+                    styles.cell,
+                    {
+                      width: cellPx,
+                      height: cellPx,
+                      marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
+                      marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+                    },
+                    type === 'empty' && styles.empty,
+                    type === 'infield' && styles.infield,
+                    type === 'track' && styles.track,
+                  ]}
+                >
+                  {type === 'track' && trackKerb ? (
+                    <>
+                      {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
+                      {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
+                      {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
+                      {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
+                    </>
+                  ) : null}
 
-              {/* INNER corner kerbs */}
-              {innerCorners?.length
-                ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />)
-                : null}
+                  {innerCorners?.length
+                    ? innerCorners.map((c) => (
+                        <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />
+                      ))
+                    : null}
 
-              {/* Stands */}
-              {showStand && (
-                <StandIcon
-                  standRotation={standRotation}
-                  seed={fnv1a32(trackId + i)}
-                  minDotsPerBar={
-                    entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
-                  }
-                  entertainmentValue={entertainmentValue}
-                  size={Math.max(cellPx * 0.1, 6)}
-                />
-              )}
-            </View>
-          )
-        })}
+                  {showStand && (
+                    <StandIcon
+                      standRotation={standRotation}
+                      seed={fnv1a32(trackId + i)}
+                      minDotsPerBar={
+                        entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
+                      }
+                      entertainmentValue={entertainmentValue}
+                      size={Math.max(cellPx * 0.1, 6)}
+                    />
+                  )}
+                </View>
+              )
+            })}
 
-        {/* ✅ Cars are rendered once, as an overlay */}
-        {showCars ? (
-          <CellCars cars={cars} seed={fnv1a32(trackId)} carW={cellPx / 6} carH={cellPx / 4} />
-        ) : null}
-      </View>
-    </View>
+            {showCarsVisual ? (
+              <CellCars cars={cars} seed={fnv1a32(trackId)} carW={cellPx / 6} carH={cellPx / 4} />
+            ) : null}
+          </View>
+        </View>
+
+        <View style={{ width: wrapW, alignSelf: 'center', marginTop: 12 }}>
+          <TrackLeaderboard cars={cars} height={470} />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+
+  // ✅ remove big vertical padding; allow content to fill viewport
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 6,
+    paddingBottom: 6,
+  },
+
   wrap: {
     alignSelf: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.10)', // grid lines
+    backgroundColor: 'rgba(0,0,0,0.10)',
   },
 
   cell: {
@@ -544,7 +582,6 @@ const styles = StyleSheet.create({
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
   track: { backgroundColor: 'rgba(20, 20, 20, 0.18)', overflow: 'visible' },
 
-  // ---------- Outer kerbs (edge strips) ----------
   kerbStrip: {
     position: 'absolute',
     overflow: 'hidden',
@@ -566,7 +603,6 @@ const styles = StyleSheet.create({
   kerbLeft: { left: 0 },
   kerbRight: { right: 0 },
 
-  // stripes
   kerbStripe: {},
   kerbStripeH: { flex: 1 },
   kerbStripeV: { flex: 1 },

@@ -31,7 +31,7 @@ export default function MapTrackDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.headerWrap}>
         <View style={styles.headerTopRow}>
           <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={10}>
@@ -90,7 +90,6 @@ const styles = StyleSheet.create({
   },
   headerWrap: {
     paddingHorizontal: 16,
-    paddingTop: 12,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -101,7 +100,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
     marginBottom: 12,
   },
 
