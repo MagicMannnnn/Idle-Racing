@@ -90,9 +90,7 @@ type V2 = { x: number; y: number }
 
 const dot = (a: V2, b: V2) => a.x * b.x + a.y * b.y
 const sub = (a: V2, b: V2): V2 => ({ x: a.x - b.x, y: a.y - b.y })
-const add = (a: V2, b: V2): V2 => ({ x: a.x + b.x, y: a.y + b.y })
 const mul = (a: V2, s: number): V2 => ({ x: a.x * s, y: a.y * s })
-const len2 = (a: V2) => a.x * a.x + a.y * a.y
 const normalize = (a: V2): V2 => {
   const m = Math.hypot(a.x, a.y)
   if (m < 1e-9) return { x: 1, y: 0 }
@@ -102,23 +100,20 @@ const normalize = (a: V2): V2 => {
 function rectAxes(rad: number): [V2, V2] {
   const c = Math.cos(rad)
   const s = Math.sin(rad)
-  // local X axis and Y axis (world)
   return [
-    { x: c, y: s }, // axis along "width" direction
-    { x: -s, y: c }, // axis along "height" direction
+    { x: c, y: s }, // local X axis
+    { x: -s, y: c }, // local Y axis
   ]
 }
 
 function projectOBB(center: V2, ax: V2, ay: V2, hx: number, hy: number, axis: V2) {
-  // Interval along axis for an OBB centered at center with half-extents hx/hy along ax/ay
   const c = dot(center, axis)
   const r = Math.abs(dot(ax, axis)) * hx + Math.abs(dot(ay, axis)) * hy
   return { min: c - r, max: c + r }
 }
 
 function overlap1D(a: { min: number; max: number }, b: { min: number; max: number }) {
-  const o = Math.min(a.max, b.max) - Math.max(a.min, b.min)
-  return o
+  return Math.min(a.max, b.max) - Math.max(a.min, b.min)
 }
 
 function mtvOBB(
@@ -145,7 +140,7 @@ function mtvOBB(
     const pB = projectOBB(cB, axB, ayB, hxB, hyB, axis)
 
     const o = overlap1D(pA, pB)
-    if (o <= 0) return null // separated on this axis
+    if (o <= 0) return null
 
     if (o < bestOverlap) {
       bestOverlap = o
@@ -155,7 +150,6 @@ function mtvOBB(
 
   if (!bestAxis) return null
 
-  // Ensure MTV points from A -> away from B consistently
   const dir = sub(cB, cA)
   if (dot(dir, bestAxis) < 0) bestAxis = mul(bestAxis, -1)
 
@@ -199,7 +193,7 @@ export function useTrackCars({
       minSpeedAdv: 0.2,
       overtakeBoost: 1.1,
 
-      laneOffset: 0.45,
+      laneOffset: 0.75,
       laneEaseOut: 2.0,
       laneEaseBack: 1.0,
       laneHold: 0.0,
@@ -208,15 +202,19 @@ export function useTrackCars({
       alongsideGap: 0.0,
       lockWindow: 1.35,
 
-      // Collision avoidance (hard constraint in s/lane space)
+      // Collision avoidance (s/lane space)
       minLongGap: 0.38,
       laneSnap: 0.85,
       resolveIters: 3,
 
-      // Pixel-space collision resolution (OBB)
-      collideIters: 6, // more = more stable in clusters
-      collideSlopPx: 0.75, // extra separation buffer
-      maxPushPerIterPx: 6, // avoids huge teleports
+      // Pixel-space smoothing + collision
+      followRate: 18.0, // higher => cars snap back to the path faster (but still smooth)
+      collideIters: 8,
+      collideSlopPx: 0.75,
+      maxPushPerIterPx: 3.5,
+
+      // IMPORTANT: prevent “swap” snaps by avoiding pushes along travel direction
+      tangentPushCapPx: 0.35, // allow tiny along-track nudge only
     }
   }, [])
 
@@ -251,9 +249,14 @@ export function useTrackCars({
   const phaseRef = useRef<OvertakePhase[]>([])
   const holdRef = useRef<number[]>([])
 
+  // pixel pose state (smoothed / collision-resolved)
+  const posXRef = useRef<number[]>([])
+  const posYRef = useRef<number[]>([])
+  const rotRef = useRef<number[]>([])
+
   // multi-target lock list (active target is last)
-  const targetIdRef = useRef<number[][]>([]) // [] if none, otherwise list of ids
-  const beingOvertakenRef = useRef<number[]>([]) // 0/1 recomputed each tick
+  const targetIdRef = useRef<number[][]>([])
+  const beingOvertakenRef = useRef<number[]>([])
 
   const runningRef = useRef(false)
   const rafRef = useRef<number | null>(null)
@@ -268,7 +271,6 @@ export function useTrackCars({
     }
   }, [])
 
-  // active target id
   const getActiveTarget = (i: number) => {
     const list = targetIdRef.current[i]
     return list && list.length ? list[list.length - 1] : 0
@@ -288,6 +290,10 @@ export function useTrackCars({
     sideRef.current = []
     phaseRef.current = []
     holdRef.current = []
+
+    posXRef.current = []
+    posYRef.current = []
+    rotRef.current = []
 
     targetIdRef.current = []
     beingOvertakenRef.current = []
@@ -320,6 +326,11 @@ export function useTrackCars({
       phaseRef.current.push(0)
       holdRef.current.push(0)
 
+      // init to 0; first tick will place
+      posXRef.current.push(0)
+      posYRef.current.push(0)
+      rotRef.current.push(0)
+
       targetIdRef.current.push([])
       beingOvertakenRef.current.push(0)
     }
@@ -335,7 +346,6 @@ export function useTrackCars({
     const stepPx = cellPx + gapPx
     const halfStep = stepPx / 2
 
-    // Car dimensions (match CellCars usage by default)
     const carW = Math.max(1, carWPx ?? cellPx * carWFrac)
     const carH = Math.max(1, carHPx ?? cellPx * carHFrac)
     const halfW = carW / 2
@@ -386,7 +396,7 @@ export function useTrackCars({
       }
 
       // ---------------------------
-      // Recompute "being overtaken" (based on ACTIVE target)
+      // Recompute "being overtaken"
       // ---------------------------
       beingOvertakenRef.current.fill(0)
       for (let i = 0; i < ids.length; i++) {
@@ -401,9 +411,6 @@ export function useTrackCars({
       const isBeingOvertaken = (i: number) => beingOvertakenRef.current[i] === 1
       const isLocked = (i: number) => isOvertaking(i) || isBeingOvertaken(i)
 
-      // ---------------------------
-      // Helper: is someone already overtaking this leader nearby?
-      // ---------------------------
       const leaderHasActivePass = (leaderId: number, leaderS: number) => {
         for (let j = 0; j < ids.length; j++) {
           const active = getActiveTarget(j)
@@ -415,9 +422,6 @@ export function useTrackCars({
         return false
       }
 
-      // ---------------------------
-      // Helper: choose a side that isn't "reserved" around a leader
-      // ---------------------------
       const pickSideForLeader = (leaderId: number, preferred: number) => {
         let leftUsed = false
         let rightUsed = false
@@ -438,7 +442,7 @@ export function useTrackCars({
       }
 
       // ---------------------------
-      // Initiate overtakes (follower only) with locks
+      // Initiate overtakes
       // ---------------------------
       for (let k = 0; k < order.length; k++) {
         const leader = order[k]
@@ -458,14 +462,14 @@ export function useTrackCars({
           if (side === 0) continue
 
           sideArr[fi] = side
-          phaseArr[fi] = 1 // OUT
+          phaseArr[fi] = 1
           targetIdRef.current[fi] = [leader.id]
           beingOvertakenRef.current[li] = 1
         }
       }
 
       // ---------------------------
-      // Main sim per car (speed + phase changes)
+      // Main sim per car
       // ---------------------------
       for (let i = 0; i < sArr.length; i++) {
         const s = ((sArr[i] % len) + len) % len
@@ -513,14 +517,13 @@ export function useTrackCars({
         if (ns < 0) ns += len
         sArr[i] = ns
 
-        // phase transitions using active target lock (+ chain overtake)
+        // phase transitions
         if (phaseArr[i] !== 0) {
           const activeTargetId = getActiveTarget(i)
 
           const ahead = getNextAhead(i)
           const gapAhead = ahead ? (ahead.s - sArr[i] + len) % len : Infinity
 
-          // still alongside active target?
           let stillAlongside = false
           if (activeTargetId) {
             const ti = ids.indexOf(activeTargetId)
@@ -536,7 +539,6 @@ export function useTrackCars({
             const list = targetIdRef.current[i]
             if (list.includes(ahead.id)) return false
 
-            // within overtake distance -> extend target list and keep holding
             if (gapAhead < TUNE.gapStart) {
               targetIdRef.current[i] = [...list, ahead.id]
               phaseArr[i] = 2
@@ -560,9 +562,7 @@ export function useTrackCars({
           } else if (phaseArr[i] === 3) {
             if (!stillAlongside) {
               const chained = tryChainTarget()
-              if (!chained) {
-                holdArr[i] = Math.max(0, holdArr[i] - dt)
-              }
+              if (!chained) holdArr[i] = Math.max(0, holdArr[i] - dt)
             } else {
               holdArr[i] = Math.max(holdArr[i], 0.1)
             }
@@ -577,10 +577,8 @@ export function useTrackCars({
       }
 
       // ---------------------------
-      // Lane planning & hard collision-avoidance (s/lane space)
+      // Lane planning (s/lane space)
       // ---------------------------
-
-      // Desired lane from behaviour
       const desired = new Array<number>(ids.length).fill(0)
       for (let i = 0; i < ids.length; i++) {
         desired[i] = phaseArr[i] === 1 || phaseArr[i] === 2 ? sideArr[i] : 0
@@ -604,7 +602,6 @@ export function useTrackCars({
         return true
       }
 
-      // Resolve close pairs so they never share a lane when close
       for (let iter = 0; iter < TUNE.resolveIters; iter++) {
         for (let k = 0; k < order.length; k++) {
           const follower = order[(k - 1 + order.length) % order.length]
@@ -623,7 +620,6 @@ export function useTrackCars({
           const fOver = phaseArr[fi] === 1 || phaseArr[fi] === 2
           const lOver = phaseArr[li] === 1 || phaseArr[li] === 2
 
-          // Prefer moving the non-overtaking car
           const firstYield = !fOver && lOver ? fi : !lOver && fOver ? li : fi
           const secondYield = firstYield === fi ? li : fi
 
@@ -639,13 +635,10 @@ export function useTrackCars({
             return false
           }
 
-          if (!tryMove(firstYield)) {
-            tryMove(secondYield)
-          }
+          if (!tryMove(firstYield)) tryMove(secondYield)
         }
       }
 
-      // Smooth actual lane towards resolved desired lane
       for (let i = 0; i < ids.length; i++) {
         const targetLane = snapLane(desired[i])
         const ease = targetLane === 0 ? TUNE.laneEaseBack : TUNE.laneEaseOut
@@ -653,11 +646,13 @@ export function useTrackCars({
       }
 
       // ---------------------------
-      // Pose compute (into temp arrays)
+      // Compute target pose (path-follow) -> targetPx/targetPy/rot
+      // then smooth-follow -> px/py (warm start for collisions)
       // ---------------------------
-      const px = new Array<number>(sArr.length).fill(0)
-      const py = new Array<number>(sArr.length).fill(0)
-      const rot = new Array<number>(sArr.length).fill(0)
+      const targetPx = new Array<number>(sArr.length).fill(0)
+      const targetPy = new Array<number>(sArr.length).fill(0)
+      const rotDegArr = new Array<number>(sArr.length).fill(0)
+      const rotRadArr = new Array<number>(sArr.length).fill(0)
 
       for (let i = 0; i < sArr.length; i++) {
         const ns = ((sArr[i] % len) + len) % len
@@ -675,7 +670,8 @@ export function useTrackCars({
         const entryDeg = dirToDeg(entryDir2)
         const exitDeg = dirToDeg(exitDir2)
         const rotDeg = normAngleDeg(entryDeg + shortestDeltaDeg(entryDeg, exitDeg) * localT)
-        rot[i] = rotDeg
+        rotDegArr[i] = rotDeg
+        rotRadArr[i] = (rotDeg * Math.PI) / 180
 
         let dx = 0
         let dy = 0
@@ -704,28 +700,49 @@ export function useTrackCars({
           dy = cy0 + Math.sin(a)
         }
 
-        const rad = (rotDeg * Math.PI) / 180
         const laneAmt = laneArr[i] * TUNE.laneOffset
-
-        const ox = Math.cos(rad) * laneAmt
-        const oy = Math.sin(rad) * laneAmt
+        const ox = Math.cos(rotRadArr[i]) * laneAmt
+        const oy = Math.sin(rotRadArr[i]) * laneAmt
 
         const { cx, cy } = idxToCenter(curr2)
+        targetPx[i] = cx + (dx + ox) * halfStep
+        targetPy[i] = cy + (dy + oy) * halfStep
+      }
 
-        px[i] = cx + (dx + ox) * halfStep
-        py[i] = cy + (dy + oy) * halfStep
+      // Smooth-follow (prevents snapping/jitter; also prevents “swap” when side-by-side)
+      const followAlpha = 1 - Math.exp(-TUNE.followRate * dt)
+
+      const px = new Array<number>(sArr.length).fill(0)
+      const py = new Array<number>(sArr.length).fill(0)
+
+      for (let i = 0; i < ids.length; i++) {
+        const lastX = posXRef.current[i] ?? targetPx[i]
+        const lastY = posYRef.current[i] ?? targetPy[i]
+
+        // first placement
+        if (lastX === 0 && lastY === 0 && posXRef.current[i] === 0 && posYRef.current[i] === 0) {
+          posXRef.current[i] = targetPx[i]
+          posYRef.current[i] = targetPy[i]
+        }
+
+        px[i] =
+          (posXRef.current[i] ?? targetPx[i]) +
+          (targetPx[i] - (posXRef.current[i] ?? targetPx[i])) * followAlpha
+        py[i] =
+          (posYRef.current[i] ?? targetPy[i]) +
+          (targetPy[i] - (posYRef.current[i] ?? targetPy[i])) * followAlpha
       }
 
       // ---------------------------
-      // Pixel-space collision resolve (prevents any overlap)
-      // - Uses oriented rectangles (width/height) with rotation
-      // - Applies small, iterative minimum translation vectors (MTV)
+      // Pixel-space collision resolve (stable side-by-side)
+      // Key change: push mostly PERPENDICULAR to travel direction (normal),
+      // and cap tiny along-tangent movement to avoid “swap” snaps.
       // ---------------------------
       const slop = TUNE.collideSlopPx
       const hx = halfW + slop
       const hy = halfH + slop
 
-      // If cars are exactly on top (rare), add a tiny deterministic nudge so MTV has a direction
+      // deterministic tiny nudge if exact overlap
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
           if (Math.abs(px[i] - px[j]) < 1e-6 && Math.abs(py[i] - py[j]) < 1e-6) {
@@ -742,43 +759,81 @@ export function useTrackCars({
 
         for (let i = 0; i < ids.length; i++) {
           for (let j = i + 1; j < ids.length; j++) {
-            // quick reject by distance (cheap) to avoid SAT most of the time
+            // quick reject
             const dx = px[j] - px[i]
             const dy = py[j] - py[i]
-            const rr = (Math.max(hx, hy) + Math.max(hx, hy)) * 0.9
-            if (dx * dx + dy * dy > rr * rr * 4) continue
+            const rr = Math.max(hx, hy) * 2.0
+            if (dx * dx + dy * dy > rr * rr) continue
 
             const mtv = mtvOBB(
               { x: px[i], y: py[i] },
-              (rot[i] * Math.PI) / 180,
+              rotRadArr[i],
               hx,
               hy,
               { x: px[j], y: py[j] },
-              (rot[j] * Math.PI) / 180,
+              rotRadArr[j],
               hx,
               hy,
             )
-
             if (!mtv) continue
             any = true
 
-            // Split push evenly
-            let push = mul(mtv, 0.5)
+            // Average heading -> tangent/normal
+            const h0 = { x: Math.cos(rotRadArr[i]), y: Math.sin(rotRadArr[i]) }
+            const h1 = { x: Math.cos(rotRadArr[j]), y: Math.sin(rotRadArr[j]) }
+            let tan = normalize({ x: h0.x + h1.x, y: h0.y + h1.y })
+            // if opposite headings (rare on a loop), fall back to pair vector
+            if (
+              !Number.isFinite(tan.x) ||
+              !Number.isFinite(tan.y) ||
+              Math.hypot(tan.x, tan.y) < 1e-6
+            ) {
+              tan = normalize({ x: dx, y: dy })
+            }
+            const nor = { x: -tan.y, y: tan.x }
 
-            // Clamp push per iteration (stability)
-            const m = Math.hypot(push.x, push.y)
-            if (m > TUNE.maxPushPerIterPx) {
-              push = mul(push, TUNE.maxPushPerIterPx / m)
+            // Decompose MTV into normal + tangent, but heavily prefer normal
+            const mtvN = dot(mtv, nor)
+            const mtvT = dot(mtv, tan)
+
+            // mostly separate sideways
+            let push = {
+              x:
+                nor.x * mtvN +
+                tan.x * Math.max(-TUNE.tangentPushCapPx, Math.min(TUNE.tangentPushCapPx, mtvT)),
+              y:
+                nor.y * mtvN +
+                tan.y * Math.max(-TUNE.tangentPushCapPx, Math.min(TUNE.tangentPushCapPx, mtvT)),
             }
 
-            px[i] -= push.x
-            py[i] -= push.y
-            px[j] += push.x
-            py[j] += push.y
+            // Split push evenly
+            push = { x: push.x * 0.5, y: push.y * 0.5 }
+
+            // Clamp per iter for smoothness
+            const m = Math.hypot(push.x, push.y)
+            if (m > TUNE.maxPushPerIterPx) {
+              const s = TUNE.maxPushPerIterPx / m
+              push = { x: push.x * s, y: push.y * s }
+            }
+
+            // Deterministic bias: keep ordering stable when side-by-side
+            // (prevents “swap” when both pushes are symmetric)
+            const bias = ids[i] < ids[j] ? -0.02 : 0.02
+            px[i] -= push.x + nor.x * bias
+            py[i] -= push.y + nor.y * bias
+            px[j] += push.x + nor.x * bias
+            py[j] += push.y + nor.y * bias
           }
         }
 
         if (!any) break
+      }
+
+      // Persist smoothed + collision-resolved positions
+      for (let i = 0; i < ids.length; i++) {
+        posXRef.current[i] = px[i]
+        posYRef.current[i] = py[i]
+        rotRef.current[i] = rotDegArr[i]
       }
 
       // ---------------------------
@@ -787,9 +842,9 @@ export function useTrackCars({
       for (let i = 0; i < sArr.length; i++) {
         const carAnim = cars[i]
         if (carAnim) {
-          carAnim.x.value = px[i]
-          carAnim.y.value = py[i]
-          carAnim.rotDeg.value = rot[i]
+          carAnim.x.value = posXRef.current[i]
+          carAnim.y.value = posYRef.current[i]
+          carAnim.rotDeg.value = rotRef.current[i]
         }
       }
 
