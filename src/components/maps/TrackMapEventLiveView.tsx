@@ -537,9 +537,7 @@ export function TrackMapEventLiveView({
               )
             })}
 
-            {showCarsVisual ? (
-              <CellCars cars={cars} seed={fnv1a32(trackId)} carW={cellPx / 6} carH={cellPx / 4} />
-            ) : null}
+            {showCarsVisual ? <CellCars cars={cars} carW={cellPx / 6} carH={cellPx / 4} /> : null}
           </View>
         </View>
 

@@ -1,38 +1,18 @@
-import React, { useMemo } from 'react'
+// CellCars.tsx
+// ✅ Use the car.colorHex (so it always matches leaderboard)
+
+import React from 'react'
 import { StyleSheet } from 'react-native'
 import Animated, { useAnimatedStyle } from 'react-native-reanimated'
 import type { CarAnim } from './useTrackCars'
-import { mulberry32 } from './utils'
 
 type Props = {
   cars: CarAnim[]
-  seed?: number
   carW?: number
   carH?: number
 }
 
-const PALETTE = [
-  '#ff595e',
-  '#ffca3a',
-  '#1982c4',
-  '#6a4c93',
-  '#118ab2',
-  '#ef476f',
-  '#ffd166',
-  '#073b4c',
-]
-
-function CarView({
-  car,
-  color,
-  carW,
-  carH,
-}: {
-  car: CarAnim
-  color: string
-  carW: number
-  carH: number
-}) {
+function CarView({ car, carW, carH }: { car: CarAnim; carW: number; carH: number }) {
   const style = useAnimatedStyle(() => ({
     position: 'absolute',
     transform: [
@@ -45,25 +25,16 @@ function CarView({
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.car, { width: carW, height: carH, backgroundColor: color }, style]}
+      style={[styles.car, { width: carW, height: carH, backgroundColor: car.colorHex }, style]}
     />
   )
 }
 
-export function CellCars({ cars, seed = 12345, carW = 6, carH = 10 }: Props) {
-  const colors = useMemo(
-    () =>
-      cars.map((c) => {
-        const r = mulberry32(((seed ^ c.id) >>> 0) as number)()
-        return PALETTE[Math.floor(r * PALETTE.length)]
-      }),
-    [cars, seed],
-  )
-
+export function CellCars({ cars, carW = 6, carH = 10 }: Props) {
   return (
     <Animated.View pointerEvents="none" style={styles.overlay}>
-      {cars.map((c, i) => (
-        <CarView key={c.id} car={c} color={colors[i]} carW={carW} carH={carH} />
+      {cars.map((c) => (
+        <CarView key={c.id} car={c} carW={carW} carH={carH} />
       ))}
     </Animated.View>
   )

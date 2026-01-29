@@ -6,6 +6,7 @@ type Row = {
   id: number
   laps: number
   progress: number
+  colorHex: string
 }
 
 type Props = {
@@ -28,6 +29,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
         id: c.id,
         laps: Math.max(0, Math.floor(c.laps.value || 0)),
         progress: c.progress.value || 0,
+        colorHex: c.colorHex, // ✅ from hook
       }))
 
       // sort: highest progress first
@@ -48,7 +50,6 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
   const fmtGap = useMemo(() => {
     return (gap: number) => {
       if (!Number.isFinite(gap) || gap <= 0) return '—'
-      // show as "steps" with 1 decimal; you can change to seconds later
       return `+${gap.toFixed(1)}`
     }
   }, [])
@@ -77,7 +78,13 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
           return (
             <View key={r.id} style={[styles.row, idx === 0 && styles.rowLeader]}>
               <Text style={[styles.cell, styles.pos]}>{idx + 1}</Text>
-              <Text style={[styles.cell, styles.name]}>{`Car ${r.id}`}</Text>
+
+              {/* ✅ color swatch + driver name */}
+              <View style={styles.nameWrap}>
+                <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
+                <Text style={[styles.cell, styles.name]}>{`Car ${r.id}`}</Text>
+              </View>
+
               <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>
               <Text style={[styles.cell, styles.gap]}>{idx === 0 ? '—' : fmtGap(gap)}</Text>
             </View>
@@ -135,9 +142,26 @@ const styles = StyleSheet.create({
   rowLeader: {
     backgroundColor: 'rgba(255,255,255,0.75)',
   },
+
   cell: { fontSize: 13 },
   pos: { width: 28, fontWeight: '800' },
+
+  // ✅ driver cell now contains swatch + text
+  nameWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  swatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.18)',
+  },
   name: { flex: 1, fontWeight: '600' },
+
   laps: { width: 48, textAlign: 'right', opacity: 0.8 },
   gap: { width: 62, textAlign: 'right', opacity: 0.8 },
 
