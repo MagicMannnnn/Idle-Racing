@@ -6,12 +6,7 @@ import React, { useMemo, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, Platform, ScrollView } from 'react-native'
 import TrackEvents from '@/src/components/events/events'
 import { SafeAreaView } from 'react-native-safe-area-context'
-
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
+import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 export default function TrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useEvents } from '@/src/state/useEvents'
+import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 type TrackLike = {
   id: string
@@ -14,12 +15,6 @@ type TrackLike = {
 }
 
 const STEPS_MIN = [1, 5, 10, 30, 60, 180, 360, 720, 1440] as const
-
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
 
 function formatDurationLabel(minutes: number) {
   if (minutes < 60) return `${minutes} min`
