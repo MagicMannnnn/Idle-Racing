@@ -224,6 +224,13 @@ export function useTrackCars({
       maxLap: 9999,
 
       startWaitTime: 2.0,
+      maxOvertakeTime: 12.0,
+
+      insideCornerOvertakeMul: 0.92,
+
+      slipstreamWindow: 0.55,
+      slipstreamBoost: 1.04,
+      slipstreamMinFrac: 0.2,
     }
   }, [])
 
@@ -255,6 +262,7 @@ export function useTrackCars({
   const sideRef = useRef<number[]>([])
   const phaseRef = useRef<OvertakePhase[]>([])
   const holdRef = useRef<number[]>([])
+  const overtakeTimeRef = useRef<number[]>([])
 
   const posXRef = useRef<number[]>([])
   const posYRef = useRef<number[]>([])
@@ -319,6 +327,7 @@ export function useTrackCars({
       sideRef.current[i] = 0
       phaseRef.current[i] = 0
       holdRef.current[i] = 0
+      overtakeTimeRef.current[i] = 0
 
       posXRef.current[i] = 0
       posYRef.current[i] = 0
@@ -400,6 +409,7 @@ export function useTrackCars({
     sideRef.current = new Array(safeCarCount).fill(0)
     phaseRef.current = new Array(safeCarCount).fill(0) as OvertakePhase[]
     holdRef.current = new Array(safeCarCount).fill(0)
+    overtakeTimeRef.current = new Array(safeCarCount).fill(0)
 
     posXRef.current = new Array(safeCarCount).fill(0)
     posYRef.current = new Array(safeCarCount).fill(0)
@@ -524,11 +534,7 @@ export function useTrackCars({
         carAnim.progress.value = lp * len + ns
       }
     }
-  }, [cars, len, cellAttachDepsKey(cellPx, gapPx, padPx, width), loop, computeDir, TUNE.laneOffset])
-
-  function cellAttachDepsKey(a: number, b: number, c: number, d: number) {
-    return a + b + c + d
-  }
+  }, [cars, cellPx, gapPx, padPx, width, len, loop, computeDir, TUNE.laneOffset])
 
   const start = useCallback(() => {
     if (runningRef.current) return
@@ -598,9 +604,30 @@ export function useTrackCars({
       const sideArr = sideRef.current
       const phaseArr = phaseRef.current
       const holdArr = holdRef.current
+      const otArr = overtakeTimeRef.current
+
+      for (let i = 0; i < ids.length; i++) {
+        if (phaseArr[i] === 1 || phaseArr[i] === 2 || phaseArr[i] === 3) {
+          otArr[i] = (otArr[i] ?? 0) + dt
+          if (otArr[i] > TUNE.maxOvertakeTime) {
+            holdArr[i] = 0
+            phaseArr[i] = 3
+            targetIdRef.current[i] = []
+          }
+        } else {
+          otArr[i] = 0
+        }
+      }
 
       const order = ids.map((id, i) => ({ i, id, s: sArr[i], v: vArr[i] }))
       order.sort((a, b) => a.s - b.s)
+
+      const gapAheadByI = new Array<number>(ids.length).fill(Infinity)
+      for (let kk = 0; kk < order.length; kk++) {
+        const cur = order[kk]
+        const ahead = order[(kk + 1) % order.length]
+        gapAheadByI[cur.i] = (ahead.s - cur.s + len) % len
+      }
 
       const getNextAhead = (i: number) => {
         for (let kk = 0; kk < order.length; kk++) {
@@ -672,6 +699,7 @@ export function useTrackCars({
           phaseArr[fi] = 1
           targetIdRef.current[fi] = [leader.id]
           beingOvertakenRef.current[leader.i] = 1
+          otArr[fi] = 0
         }
       }
 
@@ -698,11 +726,34 @@ export function useTrackCars({
         streakArr[i] = streak
         const streakFactor = streak / TUNE.streakMax
 
+        const entryDeg = dirToDeg(entryDir)
+        const exitDeg = dirToDeg(exitDir)
+        const turnDelta = shortestDeltaDeg(entryDeg, exitDeg)
+        const turnDir = turnDelta > 0 ? 1 : turnDelta < 0 ? -1 : 0
+
+        const overtakingNow = phaseArr[i] === 1 || phaseArr[i] === 2
+        const insideOvertakeCorner =
+          cornerNow &&
+          overtakingNow &&
+          turnDir !== 0 &&
+          sideArr[i] !== 0 &&
+          (turnDir > 0 ? sideArr[i] > 0 : sideArr[i] < 0) &&
+          Math.abs(laneArr[i]) > 0.25
+
+        const slipstream =
+          !cornerNow &&
+          !cornerNext &&
+          frac > TUNE.slipstreamMinFrac &&
+          gapAheadByI[i] < TUNE.slipstreamWindow &&
+          !overtakingNow
+
         let target = baseArr[i]
         target *= 1 + (TUNE.accelOnStraights - 1) * streakFactor
         if (cornerNow) target *= TUNE.cornerMul
         if (!cornerNow && cornerNext && frac > TUNE.preBrakeWindow) target *= TUNE.preBrakeMul
-        if (phaseArr[i] === 1 || phaseArr[i] === 2) target *= TUNE.overtakeBoost
+        if (overtakingNow) target *= TUNE.overtakeBoost
+        if (insideOvertakeCorner) target *= TUNE.insideCornerOvertakeMul
+        if (slipstream) target *= TUNE.slipstreamBoost
 
         const maxV = baseArr[i] * TUNE.maxMul
         const minV = baseArr[i] * TUNE.minMul
@@ -781,17 +832,14 @@ export function useTrackCars({
               }
             }
           } else if (phaseArr[i] === 3) {
-            if (!stillAlongside) {
-              const chained = tryChainTarget()
-              if (!chained) holdArr[i] = Math.max(0, holdArr[i] - dt)
-            } else {
-              holdArr[i] = Math.max(holdArr[i], 0.1)
-            }
+            if (!stillAlongside) holdArr[i] = Math.max(0, holdArr[i] - dt)
+            else holdArr[i] = Math.max(holdArr[i], 0.1)
 
             if (!stillAlongside && holdArr[i] <= 0 && Math.abs(laneArr[i]) < 0.05) {
               phaseArr[i] = 0
               sideArr[i] = 0
               targetIdRef.current[i] = []
+              otArr[i] = 0
             }
           }
         }
