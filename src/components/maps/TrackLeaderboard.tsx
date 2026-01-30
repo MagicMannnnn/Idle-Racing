@@ -51,6 +51,8 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
     }
   }, [])
 
+  let prevProgress = 0
+
   return (
     <View style={[styles.card, { height }]}>
       <View style={styles.headerRow}>
@@ -71,7 +73,8 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
         showsVerticalScrollIndicator={false}
       >
         {rows.map((r, idx) => {
-          const gap = idx === 0 ? 0 : leaderProgress - r.progress
+          const gap = idx === 0 ? 0 : prevProgress - r.progress
+          prevProgress = r.progress
           return (
             <View key={r.id} style={[styles.row, idx === 0 && styles.rowLeader]}>
               <Text style={[styles.cell, styles.pos]}>{idx + 1}</Text>

@@ -141,6 +141,45 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
   )
 }
 
+function CheckerboardOverlay({ size }: { size: number }) {
+  const squares = 6
+  const squareSize = size / squares
+  const rows = Array.from({ length: squares })
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        width: size,
+        height: size,
+        top: 0,
+        left: 0,
+        flexDirection: 'column',
+        zIndex: 10,
+      }}
+    >
+      {rows.map((_, row) => (
+        <View key={row} style={{ flexDirection: 'row', flex: 1 }}>
+          {rows.map((_, col) => {
+            const isWhite = (row + col) % 2 === 0
+            return (
+              <View
+                key={col}
+                style={{
+                  width: squareSize,
+                  height: squareSize,
+                  backgroundColor: isWhite ? '#fff' : 'transparent',
+                  opacity: isWhite ? 0.95 : 0,
+                }}
+              />
+            )
+          })}
+        </View>
+      ))}
+    </View>
+  )
+}
+
 export function TrackMapEventLiveView({
   trackId,
   sizePx = 280,
@@ -170,6 +209,8 @@ export function TrackMapEventLiveView({
   const runSim = eventInProgress
 
   const isFocused = useIsFocused()
+
+  const firstTrackIdx = useMemo(() => grid?.cells.findIndex((c) => c === 'track'), [grid?.cells])
 
   useEffect(() => {
     startTicker()
@@ -493,6 +534,9 @@ export function TrackMapEventLiveView({
                     type === 'track' && styles.track,
                   ]}
                 >
+                  {i === firstTrackIdx && type === 'track' ? (
+                    <CheckerboardOverlay size={cellPx} />
+                  ) : null}
                   {type === 'track' && trackKerb ? (
                     <>
                       {trackKerb.outer.N ? <KerbStrip side="N" /> : null}

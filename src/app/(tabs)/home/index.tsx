@@ -60,8 +60,21 @@ export default function TracksIndex() {
     setError(null)
   }
 
+  const trackNames: string[] = [
+    'Castle Corner',
+    'Castle Hill',
+    'Castle Curve',
+    'Castle Loop',
+    'Castle Valley',
+    'Castle Ridge',
+    'Castle Peak',
+    'Castle Forest',
+    'Castle River',
+    'Castle Plains',
+  ]
+
   const onConfirmBuy = () => {
-    const res = buyNextTrack(trackName || 'Castle Corner')
+    const res = buyNextTrack(trackName || trackNames[tracks.length % trackNames.length])
     if (!res.ok) {
       setError('Not enough money.')
       return
@@ -145,7 +158,7 @@ export default function TracksIndex() {
                 setTrackName(v)
                 setError(null)
               }}
-              placeholder="e.g. Castle Corner"
+              placeholder={`e.g. ${trackNames[tracks.length % trackNames.length]}`}
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.input}
               autoCapitalize="words"

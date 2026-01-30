@@ -88,10 +88,8 @@ export default function TrackEvents(props: { track: TrackLike }) {
       <View style={styles.card}>
         <View style={styles.eventTopRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.cardTitle}>Track Day</Text>
-            <Text style={styles.eventSubtitle}>
-              Open sessions • free to run • earns money while running
-            </Text>
+            <Text style={styles.cardTitle}>Race Day</Text>
+            <Text style={styles.eventSubtitle}>free to run • earns money while running</Text>
           </View>
 
           <View style={styles.eventStatusPill}>
