@@ -13,6 +13,7 @@ import {
   Modal,
   TextInput,
 } from 'react-native'
+import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 function formatRating(r: number) {
   return r.toFixed(1)
@@ -26,12 +27,6 @@ function ratingLabel(r: number) {
   return 'New'
 }
 
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
-
 export default function MapIndex() {
   const tracks = useTracks((s) => s.tracks)
 
@@ -42,7 +37,6 @@ export default function MapIndex() {
 
   return (
     <View style={styles.screen}>
-      {/* Title row with Buy button on the right */}
       <View style={styles.topRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Tracks Map</Text>
@@ -102,8 +96,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F6F7FB',
   },
-
-  // New top row layout
   topRow: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -239,7 +231,6 @@ const styles = StyleSheet.create({
     color: 'rgba(11,15,20,0.65)',
   },
 
-  // Modal styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',

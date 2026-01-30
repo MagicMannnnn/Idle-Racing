@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useTrackMaps } from '@/src/state/useTrackMaps'
+import {
+  sign,
+  angleFromDelta,
+  toXY,
+  addDeg,
+  fnv1a32,
+  mix32,
+  layoutHash,
+  angleFromOrthSum,
+} from './utils'
 
 type Props = {
   trackId: string
@@ -13,101 +23,9 @@ type Props = {
 const GRID_GAP = 1
 const GRID_PAD = 1
 
-// ---- Deterministic hashing helpers (fast + stable) ----
-function fnv1a32(str: string) {
-  let h = 0x811c9dc5
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return h >>> 0
-}
-
-function mix32(x: number) {
-  x ^= x >>> 16
-  x = Math.imul(x, 0x7feb352d)
-  x ^= x >>> 15
-  x = Math.imul(x, 0x846ca68b)
-  x ^= x >>> 16
-  return x >>> 0
-}
-
-function layoutHash(cells: string[]) {
-  let h = 2166136261 >>> 0
-  for (let i = 0; i < cells.length; i++) {
-    const c = cells[i]
-    for (let j = 0; j < c.length; j++) {
-      h ^= c.charCodeAt(j)
-      h = Math.imul(h, 16777619)
-    }
-    h ^= 1249
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
-function toXY(i: number, size: number) {
-  return { x: i % size, y: Math.floor(i / size) }
-}
-
-function sign(n: number) {
-  return n === 0 ? 0 : n > 0 ? 1 : -1
-}
-
-function addDeg(a: string, add: number) {
-  const n = Number.parseFloat(a.replace('deg', ''))
-  return `${n + add}deg`
-}
-
-function angleFromDelta(dx: number, dy: number) {
-  const rx = dy
-  const ry = -dx
-
-  if (rx === 1 && ry === 0) return '0deg'
-  if (rx === 1 && ry === 1) return '45deg'
-  if (rx === 0 && ry === 1) return '90deg'
-  if (rx === -1 && ry === 1) return '135deg'
-  if (rx === -1 && ry === 0) return '180deg'
-  if (rx === -1 && ry === -1) return '-135deg'
-  if (rx === 0 && ry === -1) return '-90deg'
-  if (rx === 1 && ry === -1) return '-45deg'
-  return '0deg'
-}
-
-function angleFromVector4(vx: number, vy: number) {
-  const mag = Math.hypot(vx, vy)
-  if (mag < 1e-6) return '0deg'
-
-  const nx = vx / mag
-  const ny = vy / mag
-
-  const dirs = [
-    { dx: 0, dy: -1, a: angleFromDelta(0, -1) }, // N
-    { dx: 1, dy: 0, a: angleFromDelta(1, 0) }, // E
-    { dx: 0, dy: 1, a: angleFromDelta(0, 1) }, // S
-    { dx: -1, dy: 0, a: angleFromDelta(-1, 0) }, // W
-  ] as const
-
-  let bestAngle: string = dirs[0].a
-  let bestDot = -Infinity
-
-  for (const d of dirs) {
-    const dot = nx * d.dx + ny * d.dy // already unit vectors
-    if (dot > bestDot) {
-      bestDot = dot
-      bestAngle = d.a
-    }
-  }
-
-  return bestAngle
-}
-
-// ----------------- Kerb helpers -----------------
 type Side = 'N' | 'E' | 'S' | 'W'
 type KerbSides = { N?: boolean; E?: boolean; S?: boolean; W?: boolean }
 type InnerCorner = 'NE' | 'SE' | 'SW' | 'NW'
-
-// Outer kerbs only live on track tiles
 type TrackKerb = { outer: KerbSides }
 
 function KerbStrip({ side }: { side: Side }) {
@@ -121,7 +39,6 @@ function KerbStrip({ side }: { side: Side }) {
     <View pointerEvents="none" style={wrapStyle}>
       {Array.from({ length: stripes }).map((_, i) => (
         <View
-          // eslint-disable-next-line react/no-array-index-key
           key={`${side}_${i}`}
           style={[
             styles.kerbStripe,
@@ -134,14 +51,10 @@ function KerbStrip({ side }: { side: Side }) {
   )
 }
 
-/**
- * Inner kerb corner: flush to tile edge (no gap).
- */
 function KerbCorner({ corner }: { corner: InnerCorner }) {
   const thickness = 6
   const stripes = 6
 
-  // flush to tile edge
   const INSET = 0
 
   const BOX = '56%' as const
@@ -190,7 +103,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       <View pointerEvents="none" style={hLegStyle}>
         {Array.from({ length: stripes }).map((_, i) => (
           <View
-            // eslint-disable-next-line react/no-array-index-key
             key={`ch_${corner}_${i}`}
             style={[
               styles.kerbStripe,
@@ -204,7 +116,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       <View pointerEvents="none" style={vLegStyle}>
         {Array.from({ length: stripes }).map((_, i) => (
           <View
-            // eslint-disable-next-line react/no-array-index-key
             key={`cv_${corner}_${i}`}
             style={[
               styles.kerbStripe,
@@ -216,13 +127,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       </View>
     </View>
   )
-}
-
-function angleFromOrthSum(sumX: number, sumY: number) {
-  // If both components exist, this is a diagonal -> use it (non-90°)
-  const dx = sign(sumX)
-  const dy = sign(sumY)
-  return angleFromDelta(dx, dy)
 }
 
 export function TrackMapView({
@@ -274,8 +178,6 @@ export function TrackMapView({
     for (let i = 0; i < k; i++) set.add(scored[i].idx)
     return set
   }, [cells, trackId, capacity, maxCapacity, mapSize])
-
-  // UPDATED: average direction over ALL 8 adjacent track tiles (robust choice)
   const standFacingByIndex = useMemo(() => {
     const map = new Map<number, string>()
     if (!cells.length || standSet.size === 0) return map
@@ -293,10 +195,10 @@ export function TrackMapView({
     if (tracksAll.length === 0) return map
 
     const orth4 = [
-      { dx: 0, dy: -1 }, // N
-      { dx: 1, dy: 0 }, // E
-      { dx: 0, dy: 1 }, // S
-      { dx: -1, dy: 0 }, // W
+      { dx: 0, dy: -1 },
+      { dx: 1, dy: 0 },
+      { dx: 0, dy: 1 },
+      { dx: -1, dy: 0 },
     ] as const
 
     for (const idx of standSet) {
@@ -309,17 +211,12 @@ export function TrackMapView({
 
       const nsOnly = hasN && hasS && !hasE && !hasW
       const ewOnly = hasE && hasW && !hasN && !hasS
-
-      // Opposite-only: don't average (it cancels to 0). Pick one deterministically.
       if (nsOnly || ewOnly) {
         const pickFirst = (mix32(fnv1a32(trackId) ^ idx) & 1) === 0
         if (nsOnly) map.set(idx, pickFirst ? angleFromDelta(0, -1) : angleFromDelta(0, 1))
         else map.set(idx, pickFirst ? angleFromDelta(1, 0) : angleFromDelta(-1, 0))
         continue
       }
-
-      // Otherwise: average orthogonal adjacency.
-      // If it produces a diagonal (non-90°), we KEEP it (e.g. N+E -> NE).
       let sumX = 0
       let sumY = 0
       let count = 0
@@ -342,9 +239,7 @@ export function TrackMapView({
       }
 
       if (count > 0) {
-        // If sums cancel (e.g. N+S+E+W, or N+S+E), we can't derive a direction.
         if (sumX === 0 && sumY === 0) {
-          // deterministic pick among PRESENT orthogonal directions
           const present: Array<[number, number]> = []
           if (hasN) present.push([0, -1])
           if (hasE) present.push([1, 0])
@@ -354,14 +249,10 @@ export function TrackMapView({
           const pick = present[mix32(fnv1a32(trackId) ^ idx) % present.length]
           map.set(idx, angleFromDelta(pick[0], pick[1]))
         } else {
-          // This will yield diagonal if both components exist, otherwise cardinal.
-          // i.e. if average would be non-90°, use it; otherwise it's a normal 90° facing.
           map.set(idx, angleFromOrthSum(sumX, sumY))
         }
         continue
       }
-
-      // 2) Fallback: nearest track
       let bestD2 = Number.POSITIVE_INFINITY
       let bestDx = 0
       let bestDy = 0
@@ -396,8 +287,6 @@ export function TrackMapView({
     const isEmpty = (x: number, y: number) => cellAt(x, y) === 'empty'
 
     const nearCornerIdx = new Set<number>()
-
-    // mark near-corner tiles for OUTER kerbs only
     for (let y = 0; y < mapSize; y++) {
       for (let x = 0; x < mapSize; x++) {
         if (!isTrack(x, y)) continue
@@ -442,7 +331,6 @@ export function TrackMapView({
     return map
   }, [cells, mapSize])
 
-  // UPDATED: inside kerbs are NOT allowed if any adjacent OUTSIDE kerb would touch this tile.
   const innerCornersByIndex = useMemo(() => {
     const map = new Map<number, InnerCorner[]>()
     if (!cells.length) return map
@@ -454,8 +342,6 @@ export function TrackMapView({
     }
     const isTrack = (x: number, y: number) => cellAt(x, y) === 'track'
 
-    // Build suppression set from OUTER kerbs:
-    // if a track tile has an outer kerb on side S, then the tile below is suppressed, etc.
     const suppressed = new Set<number>()
     for (const [idx, kerb] of trackKerbsByIndex.entries()) {
       const { x, y } = toXY(idx, mapSize)
@@ -466,7 +352,6 @@ export function TrackMapView({
     }
 
     const pushUnique = (idx: number, c: InnerCorner) => {
-      // cannot place inside kerbs if suppressed by outside kerbs nearby
       if (suppressed.has(idx)) return
 
       const arr = map.get(idx)
@@ -527,7 +412,6 @@ export function TrackMapView({
               type === 'track' && styles.track,
             ]}
           >
-            {/* OUTER kerbs only on track tiles */}
             {type === 'track' && trackKerb ? (
               <>
                 {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
@@ -537,18 +421,15 @@ export function TrackMapView({
               </>
             ) : null}
 
-            {/* INNER corner kerbs */}
             {innerCorners?.length
               ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />)
               : null}
 
-            {/* Stands */}
             {showStand ? (
               <View style={[styles.standIcon, { transform: [{ rotate: standRotation }] }]}>
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
                 <View style={styles.standBar} />
-                {/* removed the “thick darker line” -> same as normal bars */}
                 <View style={styles.standBar} />
               </View>
             ) : null}
@@ -566,7 +447,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.10)', // grid lines
+    backgroundColor: 'rgba(0,0,0,0.10)',
   },
 
   cell: {
@@ -580,7 +461,6 @@ const styles = StyleSheet.create({
   infield: { backgroundColor: 'rgba(30, 160, 80, 0.12)' },
   track: { backgroundColor: 'rgba(20, 20, 20, 0.18)' },
 
-  // ---------- Stands ----------
   standIcon: {
     width: '72%',
     height: '58%',
@@ -592,7 +472,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
 
-  // ---------- Outer kerbs (edge strips) ----------
   kerbStrip: {
     position: 'absolute',
     overflow: 'hidden',
@@ -614,7 +493,6 @@ const styles = StyleSheet.create({
   kerbLeft: { left: 0 },
   kerbRight: { right: 0 },
 
-  // stripes
   kerbStripe: {},
   kerbStripeH: { flex: 1 },
   kerbStripeV: { flex: 1 },

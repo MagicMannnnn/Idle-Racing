@@ -23,7 +23,6 @@ function clampInt(n: number, min: number, max: number) {
 function brushToCellType(b: Brush): CellType {
   if (b === 'track') return 'track'
   if (b === 'grass') return 'infield'
-  // stand area = EMPTY (viewer uses empty for stands)
   return 'empty'
 }
 
@@ -35,7 +34,6 @@ function isSingleTrackLoop(cells: CellType[], size: number) {
   for (let i = 0; i < cells.length; i++) if (cells[i] === 'track') trackIdx.push(i)
   if (trackIdx.length === 0) return { ok: false as const, reason: 'No track tiles' }
 
-  // Every track tile must have exactly 2 orthogonal track neighbours
   for (const i of trackIdx) {
     const x = i % size
     const y = Math.floor(i / size)
@@ -58,7 +56,6 @@ function isSingleTrackLoop(cells: CellType[], size: number) {
     }
   }
 
-  // Connectivity: all track tiles in one component
   const visited = new Set<number>()
   const stack = [trackIdx[0]]
   visited.add(trackIdx[0])
@@ -106,7 +103,6 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
     ensure(trackId, initialGridSize)
   }, [ensure, trackId, initialGridSize])
 
-  // store -> local draft
   useEffect(() => {
     if (!grid?.cells?.length) return
     setDraftCells(grid.cells.slice())
@@ -126,7 +122,6 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
     [cellPx, mapSize],
   )
 
-  // Stand area is EMPTY (viewer uses empty for stands)
   const standAreaCount = useMemo(() => {
     let c = 0
     for (let i = 0; i < draftCells.length; i++) if (draftCells[i] === 'empty') c++
@@ -144,8 +139,6 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
 
     const col = clampInt(rawCol, 0, mapSize - 1)
     const row = clampInt(rawRow, 0, mapSize - 1)
-
-    // ignore taps in the gaps (except edges)
     const clamped = rawCol !== col || rawRow !== row
     if (!clamped) {
       const inCellX = innerX % stride
@@ -196,7 +189,6 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
   }
 
   const onClear = () => {
-    // Clear = whole grid grass (infield), draft-only
     const next = new Array<CellType>(mapSize * mapSize).fill('infield')
     setDraftCells(next)
     setDirty(true)
@@ -220,7 +212,6 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
       return
     }
 
-    // commit exactly what the viewer expects
     setCells(trackId, draftCells)
     setDirty(false)
     setError('')
@@ -287,7 +278,7 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
                 type === 'infield' && styles.grass,
                 type === 'track' && styles.track,
                 type === 'empty' && styles.standAreaWhite,
-                type === 'stand' && styles.standMarker, // kept for compatibility if any legacy data exists
+                type === 'stand' && styles.standMarker,
               ]}
             />
           )
@@ -368,7 +359,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.10)', // grid line color
+    backgroundColor: 'rgba(0,0,0,0.10)',
   },
 
   cell: { borderRadius: 3 },
@@ -376,10 +367,7 @@ const styles = StyleSheet.create({
   grass: { backgroundColor: 'rgba(30,160,80,0.14)' },
   track: { backgroundColor: 'rgba(20,20,20,0.28)' },
 
-  // ✅ stand brush should be white (viewer’s empty tiles)
   standAreaWhite: { backgroundColor: '#FFFFFF' },
-
-  // legacy (if any persisted old data has 'stand')
   standMarker: { backgroundColor: 'rgba(255,200,0,0.32)' },
 
   bottomRow: { marginTop: 2 },

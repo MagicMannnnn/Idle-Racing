@@ -1,3 +1,5 @@
+import { CellType } from '@/src/state/useTrackMaps'
+
 function fnv1a32(str: string) {
   let h = 0x811c9dc5
   for (let i = 0; i < str.length; i++) {
@@ -66,17 +68,17 @@ function angleFromVector4(vx: number, vy: number) {
   const ny = vy / mag
 
   const dirs = [
-    { dx: 0, dy: -1, a: angleFromDelta(0, -1) }, // N
-    { dx: 1, dy: 0, a: angleFromDelta(1, 0) }, // E
-    { dx: 0, dy: 1, a: angleFromDelta(0, 1) }, // S
-    { dx: -1, dy: 0, a: angleFromDelta(-1, 0) }, // W
+    { dx: 0, dy: -1, a: angleFromDelta(0, -1) },
+    { dx: 1, dy: 0, a: angleFromDelta(1, 0) },
+    { dx: 0, dy: 1, a: angleFromDelta(0, 1) },
+    { dx: -1, dy: 0, a: angleFromDelta(-1, 0) },
   ] as const
 
   let bestAngle: string = dirs[0].a
   let bestDot = -Infinity
 
   for (const d of dirs) {
-    const dot = nx * d.dx + ny * d.dy // already unit vectors
+    const dot = nx * d.dx + ny * d.dy
     if (dot > bestDot) {
       bestDot = dot
       bestAngle = d.a
@@ -87,13 +89,11 @@ function angleFromVector4(vx: number, vy: number) {
 }
 
 function angleFromOrthSum(sumX: number, sumY: number) {
-  // If both components exist, this is a diagonal -> use it (non-90°)
   const dx = sign(sumX)
   const dy = sign(sumY)
   return angleFromDelta(dx, dy)
 }
 
-// Deterministic-ish RNG from a seed (so dots don’t reshuffle on every render)
 function mulberry32(seed: number) {
   return function () {
     let t = (seed += 0x6d2b79f5)
@@ -101,6 +101,76 @@ function mulberry32(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+function buildTrackLoop(cells: CellType[], width: number): number[] {
+  if (width <= 0) return []
+  if (cells.length % width !== 0) return []
+
+  const height = cells.length / width
+
+  const idx = (r: number, c: number) => r * width + c
+  const inBounds = (r: number, c: number) => r >= 0 && c >= 0 && r < height && c < width
+  const isTrack = (r: number, c: number) => inBounds(r, c) && cells[idx(r, c)] === 'track'
+  const dirs = [
+    [0, 1],
+    [1, 0],
+    [0, -1],
+    [-1, 0],
+  ] as const
+
+  const trackIndices: number[] = []
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] === 'track') trackIndices.push(i)
+  }
+  if (trackIndices.length === 0) return []
+  const degree2Starts: number[] = []
+  for (const i of trackIndices) {
+    const r = Math.floor(i / width)
+    const c = i % width
+    let deg = 0
+    for (const [dr, dc] of dirs) {
+      if (isTrack(r + dr, c + dc)) deg++
+    }
+    if (deg === 2) degree2Starts.push(i)
+  }
+  const start = (degree2Starts.length ? degree2Starts : trackIndices)[0]
+  if (start == null) return []
+
+  const route: number[] = []
+  const visited = new Set<number>()
+
+  let current = start
+  let prev = -1
+  const maxSteps = trackIndices.length + 1
+
+  for (let steps = 0; steps < maxSteps; steps++) {
+    route.push(current)
+    visited.add(current)
+
+    const r = Math.floor(current / width)
+    const c = current % width
+    const candidates: number[] = []
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr
+      const nc = c + dc
+      if (!isTrack(nr, nc)) continue
+      const ni = idx(nr, nc)
+      if (ni === prev) continue
+      candidates.push(ni)
+    }
+    if (candidates.includes(start) && visited.size === trackIndices.length) {
+      return route
+    }
+    const next = candidates.find((ni) => !visited.has(ni))
+    if (next == null) {
+      return []
+    }
+
+    prev = current
+    current = next
+  }
+  return []
 }
 
 export {
@@ -114,4 +184,5 @@ export {
   angleFromVector4,
   angleFromOrthSum,
   mulberry32,
+  buildTrackLoop,
 }

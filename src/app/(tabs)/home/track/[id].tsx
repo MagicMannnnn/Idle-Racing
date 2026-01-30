@@ -6,12 +6,7 @@ import React, { useMemo, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, Platform, ScrollView } from 'react-native'
 import TrackEvents from '@/src/components/events/events'
 import { SafeAreaView } from 'react-native-safe-area-context'
-
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
+import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 export default function TrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -48,8 +43,7 @@ export default function TrackDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Header (fixed) */}
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.headerWrap}>
         <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={10}>
           <Text style={styles.backIcon}>‹</Text>
@@ -74,7 +68,6 @@ export default function TrackDetail() {
         </View>
       </View>
 
-      {/* Scroll ONLY the cards area */}
       <ScrollView
         style={styles.cardsScroll}
         contentContainerStyle={styles.cardsContent}
@@ -144,7 +137,6 @@ function UpgradeCard(props: {
   const levels = quote?.ok ? quote.levels : 0
   const cost = quote?.ok ? quote.cost : 0
 
-  // disable if: no quote, maxed, can't afford, or 0 levels (MAX but no funds)
   const affordable = React.useMemo(() => {
     return !!quote?.ok && quote.affordable === true && levels > 0
   }, [quote, levels])
@@ -241,7 +233,6 @@ const styles = StyleSheet.create({
 
   pressed: { transform: [{ scale: 0.99 }], opacity: 0.95 },
 
-  // Scroll area for cards only
   cardsScroll: { flex: 1 },
   cardsContent: {
     paddingHorizontal: 16,

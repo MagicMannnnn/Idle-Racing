@@ -4,12 +4,14 @@ import { TrackMapView } from '@/src/components/maps/TrackMapView'
 import { useTracks } from '@/src/state/useTracks'
 import { useLocalSearchParams, router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function MapTrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const track = useTracks((s) => s.tracks.find((t) => t.id === id))
+
+  const size = Dimensions.get('window').width - 32
 
   const [isEditing, setIsEditing] = useState(false)
 
@@ -29,7 +31,7 @@ export default function MapTrackDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.headerWrap}>
         <View style={styles.headerTopRow}>
           <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={10}>
@@ -60,19 +62,20 @@ export default function MapTrackDetail() {
         {isEditing ? (
           <TrackMapEditor
             trackId={track.id}
-            sizePx={340}
+            sizePx={size}
             initialGridSize={initialGridSize}
             onSaved={() => setIsEditing(false)}
           />
         ) : (
           <TrackMapEventLiveView
             trackId={track.id}
-            sizePx={300}
+            sizePx={size}
             initialGridSize={initialGridSize}
             capacity={track.capacity}
             maxCapacity={track.maxCapacity}
             entertainment={track.entertainment}
             maxEntertainment={track.maxEntertainment}
+            trackSize={track.trackSize}
           />
         )}
       </View>
@@ -87,7 +90,6 @@ const styles = StyleSheet.create({
   },
   headerWrap: {
     paddingHorizontal: 16,
-    paddingTop: 12,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
@@ -98,7 +100,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
     marginBottom: 12,
   },
 

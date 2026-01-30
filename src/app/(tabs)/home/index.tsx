@@ -13,6 +13,7 @@ import {
   Modal,
   TextInput,
 } from 'react-native'
+import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 function formatRating(r: number) {
   return r.toFixed(1)
@@ -25,13 +26,6 @@ function ratingLabel(r: number) {
   if (r >= 1.5) return 'Rookie'
   return 'New'
 }
-
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
-
 export default function TracksIndex() {
   const tracks = useTracks((s) => s.tracks)
   const nextCost = useTracks((s) => s.nextTrackCost())
@@ -60,8 +54,21 @@ export default function TracksIndex() {
     setError(null)
   }
 
+  const trackNames: string[] = [
+    'Castle Corner',
+    'Castle Hill',
+    'Castle Curve',
+    'Castle Loop',
+    'Castle Valley',
+    'Castle Ridge',
+    'Castle Peak',
+    'Castle Forest',
+    'Castle River',
+    'Castle Plains',
+  ]
+
   const onConfirmBuy = () => {
-    const res = buyNextTrack(trackName || 'Castle Corner')
+    const res = buyNextTrack(trackName || trackNames[tracks.length % trackNames.length])
     if (!res.ok) {
       setError('Not enough money.')
       return
@@ -74,7 +81,6 @@ export default function TracksIndex() {
 
   return (
     <View style={styles.screen}>
-      {/* Title row with Buy button on the right */}
       <View style={styles.topRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Tracks</Text>
@@ -134,7 +140,6 @@ export default function TracksIndex() {
         }
       />
 
-      {/* Buy modal */}
       <Modal visible={buyOpen} transparent animationType="fade" onRequestClose={onCancelBuy}>
         <Pressable style={styles.modalBackdrop} onPress={onCancelBuy}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -147,7 +152,7 @@ export default function TracksIndex() {
                 setTrackName(v)
                 setError(null)
               }}
-              placeholder="e.g. Castle Corner"
+              placeholder={`e.g. ${trackNames[tracks.length % trackNames.length]}`}
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.input}
               autoCapitalize="words"
@@ -187,8 +192,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F6F7FB',
   },
-
-  // New top row layout
   topRow: {
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -324,7 +327,6 @@ const styles = StyleSheet.create({
     color: 'rgba(11,15,20,0.65)',
   },
 
-  // Modal styles
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',

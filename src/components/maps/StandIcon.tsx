@@ -43,7 +43,6 @@ export function StandIcon({
         Math.floor(rand() * (maxDotsPerBar - minDotsPerBar + 1)) * entertainmentValue
 
       const dots = Array.from({ length: count }, (_, i) => {
-        // evenly spaced across the row, with a little padding from edges
         const leftPct =
           count == 1
             ? 10 + Math.floor(rand() * 80)
@@ -77,7 +76,7 @@ export function StandIcon({
                   height: d.size,
                   borderRadius: d.size / 2,
                   backgroundColor: d.color,
-                  marginLeft: -d.size / 2, // center the dot on its left position
+                  marginLeft: -d.size / 2,
                 },
               ]}
             />
@@ -95,11 +94,10 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 
-  // Anchor for absolute dots
   standBarRow: {
     position: 'relative',
     justifyContent: 'center',
-    // give a little vertical room so dots can sit “on top” of the bar
+
     height: 10,
   },
 
@@ -111,6 +109,6 @@ export const styles = StyleSheet.create({
 
   dot: {
     position: 'absolute',
-    top: -3, // sits slightly above the bar; tweak to taste
+    top: -3,
   },
 })

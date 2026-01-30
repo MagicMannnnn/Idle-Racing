@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useEvents } from '@/src/state/useEvents'
+import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 type TrackLike = {
   id: string
@@ -14,12 +15,6 @@ type TrackLike = {
 }
 
 const STEPS_MIN = [1, 5, 10, 30, 60, 180, 360, 720, 1440] as const
-
-function formatMoney(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
 
 function formatDurationLabel(minutes: number) {
   if (minutes < 60) return `${minutes} min`
@@ -78,7 +73,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
 
   const onRun = () => {
     const res = startTrackDay(track.id, runtimeMs)
-    // ignore errors in UI for now (already running / track not found)
     void res
   }
 
@@ -89,10 +83,8 @@ export default function TrackEvents(props: { track: TrackLike }) {
       <View style={styles.card}>
         <View style={styles.eventTopRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.cardTitle}>Track Day</Text>
-            <Text style={styles.eventSubtitle}>
-              Open sessions • free to run • earns money while running
-            </Text>
+            <Text style={styles.cardTitle}>Race Day</Text>
+            <Text style={styles.eventSubtitle}>free to run • earns money while running</Text>
           </View>
 
           <View style={styles.eventStatusPill}>
@@ -108,7 +100,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
           </View>
         </View>
 
-        {/* runtime step selector */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -116,7 +107,7 @@ export default function TrackEvents(props: { track: TrackLike }) {
         >
           {STEPS_MIN.map((m, i) => {
             const activeStep = i === stepIdx
-            const disabled = running // lock runtime choice while running
+            const disabled = running
             return (
               <Pressable
                 key={`track_day_${m}`}
@@ -143,7 +134,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
           })}
         </ScrollView>
 
-        {/* progress + earnings */}
         {active ? (
           <View style={styles.progressWrap}>
             <View style={styles.progressTrack}>
@@ -194,7 +184,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
-  // Match your dark card styling
   card: {
     borderRadius: 18,
     padding: 14,
