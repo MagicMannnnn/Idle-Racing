@@ -18,8 +18,11 @@ export default function SettingsScreen() {
 
   const enlargedLeader = useSettings((s) => s.enlargedLeader)
   const setEnlargedLeader = useSettings((s) => s.setEnlargedLeader)
+  const enableAds = useSettings((s) => s.enableAds)
+  const setEnableAds = useSettings((s) => s.setEnableAds)
 
   const toggleLabel = useMemo(() => (enlargedLeader ? 'On' : 'Off'), [enlargedLeader])
+  const adsToggleLabel = useMemo(() => (enableAds ? 'On' : 'Off'), [enableAds])
 
   function doReset() {
     resetOnboarding()
@@ -68,6 +71,29 @@ export default function SettingsScreen() {
               style={[styles.pillText, enlargedLeader ? styles.pillTextOn : styles.pillTextOff]}
             >
               {toggleLabel}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Enable ads</Text>
+            <Text style={styles.rowSubtitle}>Optionally watch ads to earn rewards.</Text>
+          </View>
+
+          <Pressable
+            onPress={() => setEnableAds(!enableAds)}
+            style={({ pressed }) => [
+              styles.pill,
+              enableAds ? styles.pillOn : styles.pillOff,
+              pressed && styles.pressed,
+            ]}
+            hitSlop={10}
+          >
+            <Text style={[styles.pillText, enableAds ? styles.pillTextOn : styles.pillTextOff]}>
+              {adsToggleLabel}
             </Text>
           </Pressable>
         </View>

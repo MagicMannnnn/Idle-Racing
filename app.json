@@ -21,16 +21,24 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff",
-        "package": "com.gterry.idleracing",
-        "buildNumber": "1"
+        "backgroundColor": "#ffffff"
       },
+      "package": "com.gterry.idleracing",
+      "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-1318873164119612~5989075577"
+        }
+      ]
+    ]
   }
 }

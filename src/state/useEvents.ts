@@ -14,6 +14,7 @@ export type TrackDayEvent = {
   seed: number
   earntLastTick: number
   total: number
+  incomeX2: boolean
 }
 
 type EventsState = {
@@ -29,6 +30,12 @@ type EventsState = {
     runtimeMs: number,
   ) => { ok: true } | { ok: false; reason: 'already_running' | 'in_cooldown' | 'track_not_found' }
   stopTrackDay: (trackId: string) => { ok: true } | { ok: false; reason: 'not_running' }
+
+  // ✅ new: enable x2 income for the remainder of the current event
+  setIncomeBoost: (
+    trackId: string,
+    enabled: boolean,
+  ) => { ok: true } | { ok: false; reason: 'not_running' }
 
   startTicker: () => void
   stopTicker: () => void
@@ -53,13 +60,6 @@ function mulberry32(seed: number) {
 
 function nextSeed(seed: number) {
   return (seed * 1664525 + 1013904223) >>> 0
-}
-
-function credit(amountFloat: number) {
-  if (amountFloat <= 0) return
-  const int = Math.floor(amountFloat)
-  if (int <= 0) return
-  useMoney.getState().add(int)
 }
 
 function getTrack(trackId: string) {
@@ -117,10 +117,12 @@ function simulate(event: TrackDayEvent, now: number) {
   let seed = event.seed
   let carry = event.carry
 
+  const mult = event.incomeX2 ? 2 : 1
+
   for (let i = 0; i < seconds; i++) {
     const r = earningsPerSecond(t.capacity, t.trackSize, t.rating, seed)
     seed = r.nextSeed
-    carry += r.perSec
+    carry += r.perSec * mult
   }
 
   const creditable = Math.floor(carry)
@@ -177,6 +179,7 @@ export const useEvents = create<EventsState>()(
           carry: 0,
           earntLastTick: 0,
           total: 0,
+          incomeX2: false,
           seed: (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0,
         }
 
@@ -203,6 +206,21 @@ export const useEvents = create<EventsState>()(
         })
 
         void res
+        return { ok: true as const }
+      },
+
+      setIncomeBoost: (trackId, enabled) => {
+        const e = get().activeByTrack[trackId]
+        if (!e) return { ok: false as const, reason: 'not_running' }
+        const on = !!enabled
+        if (e.incomeX2 === on) return { ok: true as const }
+
+        set((s) => ({
+          activeByTrack: {
+            ...s.activeByTrack,
+            [trackId]: { ...(s.activeByTrack[trackId] as TrackDayEvent), incomeX2: on },
+          },
+        }))
 
         return { ok: true as const }
       },
@@ -246,7 +264,10 @@ export const useEvents = create<EventsState>()(
             changed ||
             res.next.lastTickAt !== e.lastTickAt ||
             res.next.carry !== e.carry ||
-            res.next.seed !== e.seed
+            res.next.seed !== e.seed ||
+            res.next.earntLastTick !== e.earntLastTick ||
+            res.next.total !== e.total ||
+            res.next.incomeX2 !== e.incomeX2
 
           if (now >= e.endsAt) {
             nextCooldown[trackId] = now + cooldownForRuntime(e.runtimeMs)
@@ -267,6 +288,21 @@ export const useEvents = create<EventsState>()(
       name: 'idle.events.simple.v1',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as any
+        if (version < 1) return p
+
+        // Add incomeX2 default for older persisted events
+        const abt = (p.activeByTrack ?? {}) as Record<string, any>
+        const next: Record<string, any> = {}
+        for (const k of Object.keys(abt)) {
+          const e = abt[k]
+          if (!e) continue
+          next[k] = { ...e, incomeX2: !!e.incomeX2 }
+        }
+
+        return { ...p, activeByTrack: next }
+      },
     },
   ),
 )

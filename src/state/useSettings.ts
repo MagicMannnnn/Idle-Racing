@@ -5,6 +5,8 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 type SettingsState = {
   enlargedLeader: boolean
   setEnlargedLeader: (value: boolean) => void
+  enableAds: boolean
+  setEnableAds: (value: boolean) => void
   reset: () => void
 }
 
@@ -12,13 +14,17 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       enlargedLeader: true,
-
+      enableAds: true,
       setEnlargedLeader: (value) => {
         if (typeof value !== 'boolean') return
         set({ enlargedLeader: value })
       },
 
-      reset: () => set({ enlargedLeader: true }),
+      setEnableAds: (value) => {
+        if (typeof value !== 'boolean') return
+        set({ enableAds: value })
+      },
+      reset: () => set({ enlargedLeader: true, enableAds: true }),
     }),
     {
       name: 'idle.settings.v1',
