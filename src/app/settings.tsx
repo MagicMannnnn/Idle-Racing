@@ -99,6 +99,34 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* ✅ Tips section */}
+      <View style={styles.cardTips}>
+        <Text style={styles.tipsTitle}>Tips</Text>
+
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>
+            Make sure to edit the track in the <Text style={styles.tipStrong}>Map</Text> section.
+          </Text>
+        </View>
+
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>
+            <Text style={styles.tipStrong}>Capacity</Text> and{' '}
+            <Text style={styles.tipStrong}>Entertainment</Text> impact profit the most.
+          </Text>
+        </View>
+
+        <View style={styles.tipItem}>
+          <Text style={styles.tipBullet}>•</Text>
+          <Text style={styles.tipText}>
+            <Text style={styles.tipStrong}>Safety</Text> can be used to get the highest rating out
+            of each track.
+          </Text>
+        </View>
+      </View>
+
       <View style={styles.cardDanger}>
         <Text style={styles.dangerTitle}>Danger zone</Text>
         <Text style={styles.dangerSubtitle}>
@@ -197,6 +225,46 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
   },
 
+  // ✅ Tips styles
+  cardTips: {
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(120, 170, 255, 0.22)',
+    backgroundColor: 'rgba(120, 170, 255, 0.10)',
+    gap: 10,
+  },
+
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
+  tipItem: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+
+  tipBullet: {
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '900',
+    marginTop: 1,
+  },
+
+  tipText: {
+    flex: 1,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.80)',
+    lineHeight: 18,
+  },
+
+  tipStrong: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+
   cardDanger: {
     borderRadius: 16,
     padding: 14,
@@ -235,6 +303,6 @@ const styles = StyleSheet.create({
 
   pressed: {
     opacity: 0.85,
-    transform: [{ scale: 0.99 }],
+    transform: [{ scale: 0.95 }],
   },
 })
