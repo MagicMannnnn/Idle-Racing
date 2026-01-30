@@ -11,9 +11,7 @@ type Row = {
 
 type Props = {
   cars: CarAnim[]
-  // optional height of the leaderboard scroll area
   height?: number
-  // how often we sample SharedValues (ms)
   sampleMs?: number
 }
 
@@ -29,10 +27,9 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
         id: c.id,
         laps: Math.max(0, Math.floor(c.laps.value || 0)),
         progress: c.progress.value || 0,
-        colorHex: c.colorHex, // ✅ from hook
+        colorHex: c.colorHex,
       }))
 
-      // sort: highest progress first
       next.sort((a, b) => b.progress - a.progress)
       setRows(next)
     }
@@ -79,7 +76,6 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
             <View key={r.id} style={[styles.row, idx === 0 && styles.rowLeader]}>
               <Text style={[styles.cell, styles.pos]}>{idx + 1}</Text>
 
-              {/* ✅ color swatch + driver name */}
               <View style={styles.nameWrap}>
                 <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
                 <Text style={[styles.cell, styles.name]}>{`Car ${r.id}`}</Text>
@@ -146,7 +142,6 @@ const styles = StyleSheet.create({
   cell: { fontSize: 13 },
   pos: { width: 28, fontWeight: '800' },
 
-  // ✅ driver cell now contains swatch + text
   nameWrap: {
     flex: 1,
     flexDirection: 'row',

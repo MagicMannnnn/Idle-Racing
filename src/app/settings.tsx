@@ -14,10 +14,10 @@ export default function SettingsScreen() {
   const resetMaps = useTrackMaps((s) => s.resetAll)
 
   function handleReset() {
-    // resetOnboarding()
-    // resetMoney()
-    // resetTracks()
-    // resetEvents()
+    resetOnboarding()
+    resetMoney()
+    resetTracks()
+    resetEvents()
     resetMaps()
     router.replace('/')
   }

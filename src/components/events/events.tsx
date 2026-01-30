@@ -107,7 +107,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
           </View>
         </View>
 
-        {/* runtime step selector */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -142,7 +141,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
           })}
         </ScrollView>
 
-        {/* progress + earnings */}
         {active ? (
           <View style={styles.progressWrap}>
             <View style={styles.progressTrack}>

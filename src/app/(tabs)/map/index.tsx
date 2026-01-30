@@ -42,7 +42,6 @@ export default function MapIndex() {
 
   return (
     <View style={styles.screen}>
-      {/* Title row with Buy button on the right */}
       <View style={styles.topRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Tracks Map</Text>

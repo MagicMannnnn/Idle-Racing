@@ -412,7 +412,6 @@ export function TrackMapView({
               type === 'track' && styles.track,
             ]}
           >
-            {/* OUTER kerbs only on track tiles */}
             {type === 'track' && trackKerb ? (
               <>
                 {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
@@ -422,12 +421,10 @@ export function TrackMapView({
               </>
             ) : null}
 
-            {/* INNER corner kerbs */}
             {innerCorners?.length
               ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />)
               : null}
 
-            {/* Stands */}
             {showStand ? (
               <View style={[styles.standIcon, { transform: [{ rotate: standRotation }] }]}>
                 <View style={styles.standBar} />

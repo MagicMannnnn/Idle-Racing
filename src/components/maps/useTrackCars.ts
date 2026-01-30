@@ -1,7 +1,3 @@
-// useTrackCars.ts
-// ✅ Adds `colorHex` to each car (stable + unique-ish per car), so BOTH the car renderer and leaderboard can use it.
-// ✅ Keeps everything else the same.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { makeMutable, type SharedValue } from 'react-native-reanimated'
 
@@ -13,11 +9,9 @@ export type CarAnim = {
   y: SharedValue<number>
   rotDeg: SharedValue<number>
 
-  // ✅ Leaderboard signals
   progress: SharedValue<number>
   laps: SharedValue<number>
 
-  // ✅ Visual identity
   colorHex: string
 }
 
@@ -83,21 +77,15 @@ function mulberry32(seed: number) {
   }
 }
 
-// ✅ deterministic vivid color from id (guarantees *unique enough* even for many cars)
 function colorFromId(id: number, seed = 0x9e3779b9) {
   const r = mulberry32(((seed ^ id) >>> 0) as number)
-  const h = Math.floor(r() * 360) // 0..359
-  const s = 78 // %
-  const l = 52 // %
-  // Use HSL -> CSS string; RN supports hsl() on iOS/Android.
+  const h = Math.floor(r() * 360)
+  const s = 78
+  const l = 52
   return `hsl(${h}, ${s}%, ${l}%)`
 }
 
 type OvertakePhase = 0 | 1 | 2 | 3
-
-// =========================
-// Collision helpers (OBB)
-// =========================
 type V2 = { x: number; y: number }
 const dot = (a: V2, b: V2) => a.x * b.x + a.y * b.y
 const sub = (a: V2, b: V2): V2 => ({ x: a.x - b.x, y: a.y - b.y })
@@ -198,7 +186,6 @@ export function useTrackCars({
       maxMul: 2.0,
       minMul: 0.8,
 
-      // Overtakes
       gapStart: 0.42,
       passMargin: 1.0,
       minSpeedAdv: 0.2,
@@ -209,23 +196,19 @@ export function useTrackCars({
       laneEaseBack: 1.0,
       laneHold: 0.0,
 
-      // multi-overtake safety
       alongsideGap: 0.0,
       lockWindow: 1.35,
 
-      // Collision avoidance (s/lane space)
       minLongGap: 0.38,
       laneSnap: 0.85,
       resolveIters: 3,
 
-      // Pixel-space smoothing + collision
       followRate: 18.0,
       collideIters: 8,
       collideSlopPx: 0.75,
       maxPushPerIterPx: 3.5,
       tangentPushCapPx: 0.35,
 
-      // Spawn as a close pack
       packWindowFrac: 0.16,
       packJitter: 0.06,
 
@@ -384,7 +367,7 @@ export function useTrackCars({
         rotDeg: makeMutable(0),
         progress: makeMutable(0),
         laps: makeMutable(0),
-        colorHex: colorFromId(id), // ✅ unique color
+        colorHex: colorFromId(id),
       })
     }
 
@@ -428,7 +411,6 @@ export function useTrackCars({
     }
 
     setCars(created)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     trackSig,
     safeCarCount,

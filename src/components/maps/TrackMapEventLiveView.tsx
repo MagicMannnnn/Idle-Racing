@@ -1,11 +1,3 @@
-// ✅ Fix: remove the extra vertical padding / “mystery space” by:
-// - SafeAreaView edges limited (no huge insets)
-// - ScrollView has flex:1 and NO extra top/bottom padding
-// - contentContainerStyle uses flexGrow:1 + small padding
-// - optional: remove bounce inset padding on iOS via contentInsetAdjustmentBehavior
-
-// (Everything else unchanged)
-
 import React, { useEffect, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useIsFocused } from '@react-navigation/native'
@@ -43,12 +35,10 @@ type Props = {
 const GRID_GAP = 1
 const GRID_PAD = 1
 
-// ----------------- Kerb helpers -----------------
 type Side = 'N' | 'E' | 'S' | 'W'
 type KerbSides = { N?: boolean; E?: boolean; S?: boolean; W?: boolean }
 type InnerCorner = 'NE' | 'SE' | 'SW' | 'NW'
 
-// Outer kerbs only live on track tiles
 type TrackKerb = { outer: KerbSides }
 
 function KerbStrip({ side }: { side: Side }) {
@@ -62,7 +52,6 @@ function KerbStrip({ side }: { side: Side }) {
     <View pointerEvents="none" style={wrapStyle}>
       {Array.from({ length: stripes }).map((_, i) => (
         <View
-          // eslint-disable-next-line react/no-array-index-key
           key={`${side}_${i}`}
           style={[
             styles.kerbStripe,
@@ -126,7 +115,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       <View pointerEvents="none" style={hLegStyle}>
         {Array.from({ length: stripes }).map((_, i) => (
           <View
-            // eslint-disable-next-line react/no-array-index-key
             key={`ch_${corner}_${i}`}
             style={[
               styles.kerbStripe,
@@ -140,7 +128,6 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       <View pointerEvents="none" style={vLegStyle}>
         {Array.from({ length: stripes }).map((_, i) => (
           <View
-            // eslint-disable-next-line react/no-array-index-key
             key={`cv_${corner}_${i}`}
             style={[
               styles.kerbStripe,
@@ -474,7 +461,6 @@ export function TrackMapEventLiveView({
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
       >
-        {/* Map */}
         <View style={{ width: wrapW, alignSelf: 'center' }}>
           <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
             {Array.from({ length: mapSize * mapSize }).map((_, i) => {
@@ -553,7 +539,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flex: 1 },
 
-  // ✅ remove big vertical padding; allow content to fill viewport
   scrollContent: {
     flexGrow: 1,
     paddingTop: 6,

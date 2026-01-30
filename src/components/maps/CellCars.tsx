@@ -1,6 +1,3 @@
-// CellCars.tsx
-// ✅ Use the car.colorHex (so it always matches leaderboard)
-
 import React from 'react'
 import { StyleSheet } from 'react-native'
 import Animated, { useAnimatedStyle } from 'react-native-reanimated'
