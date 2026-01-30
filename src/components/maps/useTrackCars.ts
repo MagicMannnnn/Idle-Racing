@@ -1,3 +1,4 @@
+import { useSettings } from '@/src/state/useSettings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { makeMutable, type SharedValue } from 'react-native-reanimated'
 
@@ -178,11 +179,12 @@ export function useTrackCars({
 }: UseTrackCarsOpts) {
   const len = loop.length
   const safeCarCount = Math.min(carCount, len)
+  const variance = useSettings((s) => s.speedVariance) / 100
 
   const TUNE = useMemo(() => {
     return {
       baseSpeed: 3.2,
-      speedVariance: 0.12,
+      speedVariance: variance,
 
       accelRate: 3.5,
       accelOnStraights: 2.2,

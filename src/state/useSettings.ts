@@ -1,30 +1,44 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 type SettingsState = {
   enlargedLeader: boolean
-  setEnlargedLeader: (value: boolean) => void
+  setEnlargedLeader: (v: boolean) => void
+
   enableAds: boolean
-  setEnableAds: (value: boolean) => void
+  setEnableAds: (v: boolean) => void
+
+  // ✅ new
+  speedVariance: number // 0..100
+  setSpeedVariance: (v: number) => void
+  resetSpeedVariance: () => void
+
   reset: () => void
 }
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
+const DEFAULT_SPEED_VARIANCE = 12
 
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
-      enlargedLeader: true,
-      enableAds: true,
-      setEnlargedLeader: (value) => {
-        if (typeof value !== 'boolean') return
-        set({ enlargedLeader: value })
-      },
+      enlargedLeader: false,
+      setEnlargedLeader: (v) => set({ enlargedLeader: !!v }),
 
-      setEnableAds: (value) => {
-        if (typeof value !== 'boolean') return
-        set({ enableAds: value })
-      },
-      reset: () => set({ enlargedLeader: true, enableAds: true }),
+      enableAds: true,
+      setEnableAds: (v) => set({ enableAds: !!v }),
+
+      speedVariance: DEFAULT_SPEED_VARIANCE,
+      setSpeedVariance: (v) => set({ speedVariance: clamp(Math.round(v), 0, 100) }),
+      resetSpeedVariance: () => set({ speedVariance: DEFAULT_SPEED_VARIANCE }),
+
+      reset: () =>
+        set({
+          enlargedLeader: false,
+          enableAds: true,
+          speedVariance: DEFAULT_SPEED_VARIANCE,
+        }),
     }),
     {
       name: 'idle.settings.v1',

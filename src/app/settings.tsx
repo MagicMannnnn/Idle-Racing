@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
-import { View, Text, Pressable, Alert, StyleSheet } from 'react-native'
+import { View, Text, Pressable, Alert, StyleSheet, ScrollView } from 'react-native'
+import Slider from '@react-native-community/slider'
 import { router } from 'expo-router'
 import { useOnboarding } from '../state/useOnboarding'
 import { useMoney } from '../state/useMoney'
@@ -7,6 +8,8 @@ import { useTracks } from '../state/useTracks'
 import { useEvents } from '../state/useEvents'
 import { useTrackMaps } from '../state/useTrackMaps'
 import { useSettings } from '../state/useSettings'
+
+const DEFAULT_SPEED_VARIANCE = 12
 
 export default function SettingsScreen() {
   const resetOnboarding = useOnboarding((s) => s.reset)
@@ -18,8 +21,13 @@ export default function SettingsScreen() {
 
   const enlargedLeader = useSettings((s) => s.enlargedLeader)
   const setEnlargedLeader = useSettings((s) => s.setEnlargedLeader)
+
   const enableAds = useSettings((s) => s.enableAds)
   const setEnableAds = useSettings((s) => s.setEnableAds)
+
+  const speedVariance = useSettings((s) => s.speedVariance)
+  const setSpeedVariance = useSettings((s) => s.setSpeedVariance)
+  const resetSpeedVariance = useSettings((s) => s.resetSpeedVariance)
 
   const toggleLabel = useMemo(() => (enlargedLeader ? 'On' : 'Off'), [enlargedLeader])
   const adsToggleLabel = useMemo(() => (enableAds ? 'On' : 'Off'), [enableAds])
@@ -45,101 +53,157 @@ export default function SettingsScreen() {
     )
   }
 
+  const speedIsDefault = speedVariance === DEFAULT_SPEED_VARIANCE
+
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Settings</Text>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.title}>Settings</Text>
 
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>Enlarged leader</Text>
-            <Text style={styles.rowSubtitle}>
-              Makes the race leader easier to spot on the track.
-            </Text>
-          </View>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Enlarged leader</Text>
+              <Text style={styles.rowSubtitle}>
+                Makes the race leader easier to spot on the track.
+              </Text>
+            </View>
 
-          <Pressable
-            onPress={() => setEnlargedLeader(!enlargedLeader)}
-            style={({ pressed }) => [
-              styles.pill,
-              enlargedLeader ? styles.pillOn : styles.pillOff,
-              pressed && styles.pressed,
-            ]}
-            hitSlop={10}
-          >
-            <Text
-              style={[styles.pillText, enlargedLeader ? styles.pillTextOn : styles.pillTextOff]}
+            <Pressable
+              onPress={() => setEnlargedLeader(!enlargedLeader)}
+              style={({ pressed }) => [
+                styles.pill,
+                enlargedLeader ? styles.pillOn : styles.pillOff,
+                pressed && styles.pressed,
+              ]}
+              hitSlop={10}
             >
-              {toggleLabel}
-            </Text>
-          </Pressable>
+              <Text
+                style={[styles.pillText, enlargedLeader ? styles.pillTextOn : styles.pillTextOff]}
+              >
+                {toggleLabel}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>Enable ads</Text>
-            <Text style={styles.rowSubtitle}>Optionally watch ads to earn rewards.</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Enable ads</Text>
+              <Text style={styles.rowSubtitle}>Optionally watch ads to earn rewards.</Text>
+            </View>
+
+            <Pressable
+              onPress={() => setEnableAds(!enableAds)}
+              style={({ pressed }) => [
+                styles.pill,
+                enableAds ? styles.pillOn : styles.pillOff,
+                pressed && styles.pressed,
+              ]}
+              hitSlop={10}
+            >
+              <Text style={[styles.pillText, enableAds ? styles.pillTextOn : styles.pillTextOff]}>
+                {adsToggleLabel}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.rowTop}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Race speed variance</Text>
+              <Text style={styles.rowSubtitle}>
+                Adds randomness to car pace during races. Higher = more variation.
+              </Text>
+            </View>
+
+            <View style={styles.valuePill}>
+              <Text style={styles.valuePillText}>{Math.round(speedVariance)}</Text>
+            </View>
           </View>
 
-          <Pressable
-            onPress={() => setEnableAds(!enableAds)}
-            style={({ pressed }) => [
-              styles.pill,
-              enableAds ? styles.pillOn : styles.pillOff,
-              pressed && styles.pressed,
-            ]}
-            hitSlop={10}
-          >
-            <Text style={[styles.pillText, enableAds ? styles.pillTextOn : styles.pillTextOff]}>
-              {adsToggleLabel}
+          <View style={styles.sliderWrap}>
+            <Slider
+              value={speedVariance}
+              minimumValue={1}
+              maximumValue={50}
+              step={1}
+              onValueChange={setSpeedVariance}
+              minimumTrackTintColor="rgba(120, 170, 255, 0.95)"
+              maximumTrackTintColor="rgba(255,255,255,0.18)"
+              thumbTintColor="#FFFFFF"
+            />
+
+            <View style={styles.sliderMetaRow}>
+              <Text style={styles.sliderMeta}>1</Text>
+              <Text style={styles.sliderMeta}>50</Text>
+            </View>
+
+            <Pressable
+              onPress={resetSpeedVariance}
+              disabled={speedIsDefault}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                speedIsDefault && styles.secondaryBtnDisabled,
+                pressed && !speedIsDefault && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[styles.secondaryBtnText, speedIsDefault && styles.secondaryBtnTextDisabled]}
+              >
+                Reset to default ({DEFAULT_SPEED_VARIANCE})
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.cardTips}>
+          <Text style={styles.tipsTitle}>Tips</Text>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>
+              Make sure to edit the track in the <Text style={styles.tipStrong}>Map</Text> section.
             </Text>
+          </View>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>
+              <Text style={styles.tipStrong}>Capacity</Text> and{' '}
+              <Text style={styles.tipStrong}>Entertainment</Text> impact profit the most.
+            </Text>
+          </View>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>
+              <Text style={styles.tipStrong}>Safety</Text> can be used to get the highest rating out
+              of each track.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardDanger}>
+          <Text style={styles.dangerTitle}>Danger zone</Text>
+          <Text style={styles.dangerSubtitle}>
+            Resetting will remove all saved progress on this device.
+          </Text>
+
+          <Pressable
+            onPress={handleReset}
+            style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressed]}
+          >
+            <Text style={styles.dangerBtnText}>Reset everything</Text>
           </Pressable>
         </View>
-      </View>
-
-      {/* ✅ Tips section */}
-      <View style={styles.cardTips}>
-        <Text style={styles.tipsTitle}>Tips</Text>
-
-        <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>•</Text>
-          <Text style={styles.tipText}>
-            Make sure to edit the track in the <Text style={styles.tipStrong}>Map</Text> section.
-          </Text>
-        </View>
-
-        <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>•</Text>
-          <Text style={styles.tipText}>
-            <Text style={styles.tipStrong}>Capacity</Text> and{' '}
-            <Text style={styles.tipStrong}>Entertainment</Text> impact profit the most.
-          </Text>
-        </View>
-
-        <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>•</Text>
-          <Text style={styles.tipText}>
-            <Text style={styles.tipStrong}>Safety</Text> can be used to get the highest rating out
-            of each track.
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.cardDanger}>
-        <Text style={styles.dangerTitle}>Danger zone</Text>
-        <Text style={styles.dangerSubtitle}>
-          Resetting will remove all saved progress on this device.
-        </Text>
-
-        <Pressable
-          onPress={handleReset}
-          style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressed]}
-        >
-          <Text style={styles.dangerBtnText}>Reset everything</Text>
-        </Pressable>
-      </View>
+      </ScrollView>
     </View>
   )
 }
@@ -147,9 +211,13 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: '#0B0D12',
+  },
+
+  content: {
     padding: 16,
     gap: 14,
-    backgroundColor: '#0B0D12',
+    paddingBottom: 28,
   },
 
   title: {
@@ -166,11 +234,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(255,255,255,0.06)',
+    gap: 12,
   },
 
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+  },
+
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 12,
   },
 
@@ -225,7 +300,61 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
   },
 
-  // ✅ Tips styles
+  valuePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  valuePillText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+
+  sliderWrap: {
+    gap: 10,
+  },
+
+  sliderMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  sliderMeta: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.55)',
+  },
+
+  secondaryBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  secondaryBtnDisabled: {
+    opacity: 0.6,
+  },
+  secondaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  secondaryBtnTextDisabled: {
+    color: 'rgba(255,255,255,0.75)',
+  },
+
   cardTips: {
     borderRadius: 16,
     padding: 14,
