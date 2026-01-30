@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useIsFocused } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -212,6 +212,8 @@ export function TrackMapEventLiveView({
 
   const firstTrackIdx = useMemo(() => grid?.cells.findIndex((c) => c === 'track'), [grid?.cells])
 
+  const [leaderId, setLeaderId] = useState<number | null>(null)
+
   useEffect(() => {
     startTicker()
   }, [startTicker])
@@ -250,23 +252,35 @@ export function TrackMapEventLiveView({
     padPx: GRID_PAD,
   })
 
+  const needsNewRaceRef = useRef(false)
+
+  // mark that we need to seed a new race when an event starts
+  useEffect(() => {
+    if (runSim) needsNewRaceRef.current = true
+  }, [runSim])
+
+  // hard stop when not focused or not running sim
   useEffect(() => {
     if (!isFocused || !runSim) {
       stop()
-      return
     }
-    start()
     return stop
-  }, [isFocused, runSim, start, stop])
+  }, [isFocused, runSim, stop])
 
+  // start only when focused + ready.
+  // only call newRace once per event-start (using the ref).
   useEffect(() => {
-    if (!runSim) {
-      stop()
-      return
+    if (!isFocused || !runSim) return
+    if (loop.length === 0) return
+    if (cars.length === 0) return
+
+    if (needsNewRaceRef.current) {
+      needsNewRaceRef.current = false
+      newRace()
     }
-    newRace()
+
     start()
-  }, [runSim, newRace, start, stop])
+  }, [isFocused, runSim, loop.length, cars.length, newRace, start])
 
   const standSet = useMemo(() => {
     if (!cells.length) return new Set<number>()
@@ -567,12 +581,14 @@ export function TrackMapEventLiveView({
               )
             })}
 
-            {showCarsVisual ? <CellCars cars={cars} carW={cellPx / 6} carH={cellPx / 4} /> : null}
+            {showCarsVisual ? (
+              <CellCars cars={cars} carW={cellPx / 6} carH={cellPx / 4} leaderId={leaderId} />
+            ) : null}
           </View>
         </View>
 
         <View style={{ width: wrapW, alignSelf: 'center', marginTop: 12 }}>
-          <TrackLeaderboard cars={cars} height={470} />
+          <TrackLeaderboard cars={cars} height={470} setLeaderId={setLeaderId} />
         </View>
       </ScrollView>
     </SafeAreaView>

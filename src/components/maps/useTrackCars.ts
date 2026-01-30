@@ -8,10 +8,8 @@ export type CarAnim = {
   x: SharedValue<number>
   y: SharedValue<number>
   rotDeg: SharedValue<number>
-
   progress: SharedValue<number>
   laps: SharedValue<number>
-
   colorHex: string
 }
 
@@ -22,7 +20,6 @@ type UseTrackCarsOpts = {
   cellPx: number
   gapPx: number
   padPx: number
-
   carWFrac?: number
   carHFrac?: number
   carWPx?: number
@@ -77,12 +74,24 @@ function mulberry32(seed: number) {
   }
 }
 
-function colorFromId(id: number, seed = 0x9e3779b9) {
-  const r = mulberry32(((seed ^ id) >>> 0) as number)
-  const h = Math.floor(r() * 360)
-  const s = 78
-  const l = 52
+function colorFromId(id: number, total = 20) {
+  const h = Math.round((360 / total) * (id % total))
+  const s = 78 + (id % 2) * 10
+  const l = 52 + (id % 3) * 6
   return `hsl(${h}, ${s}%, ${l}%)`
+}
+
+function generateColorPalette(total: number) {
+  return Array.from({ length: total }, (_, i) => colorFromId(i, total))
+}
+
+function shuffle<T>(arr: T[], rand = Math.random): T[] {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
 }
 
 type OvertakePhase = 0 | 1 | 2 | 3
@@ -210,9 +219,11 @@ export function useTrackCars({
       tangentPushCapPx: 0.35,
 
       packWindowFrac: 0.16,
-      packJitter: 0.06,
+      packJitter: 0.0,
 
       maxLap: 9999,
+
+      startWaitTime: 2.0,
     }
   }, [])
 
@@ -260,6 +271,9 @@ export function useTrackCars({
 
   const sigRef = useRef<string>('')
 
+  const startAtTsRef = useRef<number | null>(null)
+  const didLayoutRef = useRef(false)
+
   const trackSig = useMemo(() => {
     return `${width}|${cellPx}|${gapPx}|${padPx}|${safeCarCount}|${loop.join(',')}`
   }, [width, cellPx, gapPx, padPx, safeCarCount, loop])
@@ -267,6 +281,8 @@ export function useTrackCars({
   const stop = useCallback(() => {
     runningRef.current = false
     lastTsRef.current = null
+    startAtTsRef.current = null
+    didLayoutRef.current = false
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = null
@@ -285,14 +301,14 @@ export function useTrackCars({
     const rand = mulberry32(Date.now())
     const packLen = Math.max(1, len * TUNE.packWindowFrac)
     const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
-    const anchor = 0
+    const anchor = len - 1e-3
 
     for (let i = 0; i < safeCarCount; i++) {
       const variance = 1 + (rand() * 2 - 1) * TUNE.speedVariance
       const base = TUNE.baseSpeed * variance
 
       const jitter = (rand() * 2 - 1) * TUNE.packJitter
-      const s0 = (anchor - i * spacing + jitter + len * 10) % len
+      const s0 = (anchor - i * spacing + jitter + len) % len
 
       sRef.current[i] = s0
       vRef.current[i] = base
@@ -357,6 +373,8 @@ export function useTrackCars({
     const created: CarAnim[] = []
     const ids: number[] = []
 
+    const colorPalette = shuffle(generateColorPalette(safeCarCount), mulberry32(Date.now()))
+
     for (let i = 0; i < safeCarCount; i++) {
       const id = nextIdRef.current++
       ids.push(id)
@@ -367,7 +385,7 @@ export function useTrackCars({
         rotDeg: makeMutable(0),
         progress: makeMutable(0),
         laps: makeMutable(0),
-        colorHex: colorFromId(id),
+        colorHex: colorPalette[i],
       })
     }
 
@@ -392,16 +410,16 @@ export function useTrackCars({
 
     lapsRef.current = new Array(safeCarCount).fill(0)
 
-    const rand = mulberry32(12345)
+    const rand = mulberry32(Date.now())
     const packLen = Math.max(1, len * TUNE.packWindowFrac)
     const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
-    const anchor = 0
+    const anchor = len - 1e-3
 
     for (let i = 0; i < safeCarCount; i++) {
       const variance = 1 + (rand() * 2 - 1) * TUNE.speedVariance
       const base = TUNE.baseSpeed * variance
       const jitter = (rand() * 2 - 1) * TUNE.packJitter
-      const s0 = (anchor - i * spacing + jitter + len * 10) % len
+      const s0 = (anchor - i * spacing + jitter + len) % len
       sRef.current[i] = s0
       vRef.current[i] = base
       baseRef.current[i] = base
@@ -420,7 +438,97 @@ export function useTrackCars({
     TUNE.packJitter,
     TUNE.packWindowFrac,
     TUNE.speedVariance,
+    cars.length,
   ])
+
+  const applyLayoutOnce = useCallback(() => {
+    const ids = idsRef.current
+    const sArr = sRef.current
+    if (!cars.length || ids.length !== cars.length || len <= 0) return
+
+    const stepPx = cellPx + gapPx
+    const halfStep = stepPx / 2
+
+    const idxToCenter = (gridIndex: number) => {
+      const r = Math.floor(gridIndex / width)
+      const c = gridIndex % width
+      return {
+        cx: padPx + c * stepPx + cellPx / 2,
+        cy: padPx + r * stepPx + cellPx / 2,
+      }
+    }
+
+    for (let i = 0; i < ids.length; i++) {
+      const ns = ((sArr[i] % len) + len) % len
+      const seg2 = Math.floor(ns)
+      const localT = ns - seg2
+
+      const curr2 = loop[seg2]
+      const next2i = loop[(seg2 + 1) % len]
+      const prev2i = loop[(seg2 - 1 + len) % len]
+
+      const entryDir2 = computeDir(prev2i, curr2)
+      const exitDir2 = computeDir(curr2, next2i)
+
+      const entryDeg = dirToDeg(entryDir2)
+      const exitDeg = dirToDeg(exitDir2)
+      const rotDeg = normAngleDeg(entryDeg + shortestDeltaDeg(entryDeg, exitDeg) * localT)
+      const rotRad = (rotDeg * Math.PI) / 180
+
+      let dx = 0
+      let dy = 0
+
+      if (!isCorner(entryDir2, exitDir2)) {
+        const straightOffset = -1 + 2 * localT
+        if (exitDir2 === 'E') dx = straightOffset
+        else if (exitDir2 === 'W') dx = -straightOffset
+        else if (exitDir2 === 'S') dy = straightOffset
+        else dy = -straightOffset
+      } else {
+        const s0 = entryPoint(entryDir2)
+        const e0 = exitPoint(exitDir2)
+        const cx0 = s0.x !== 0 ? s0.x : e0.x
+        const cy0 = s0.y !== 0 ? s0.y : e0.y
+
+        const a0 = Math.atan2(s0.y - cy0, s0.x - cx0)
+        const a1 = Math.atan2(e0.y - cy0, e0.x - cx0)
+
+        let da = a1 - a0
+        if (da > Math.PI) da -= 2 * Math.PI
+        if (da < -Math.PI) da += 2 * Math.PI
+
+        const a = a0 + da * localT
+        dx = cx0 + Math.cos(a)
+        dy = cy0 + Math.sin(a)
+      }
+
+      const laneAmt = laneRef.current[i] * TUNE.laneOffset
+      const ox = Math.cos(rotRad) * laneAmt
+      const oy = Math.sin(rotRad) * laneAmt
+
+      const { cx, cy } = idxToCenter(curr2)
+      const x = cx + (dx + ox) * halfStep
+      const y = cy + (dy + oy) * halfStep
+
+      posXRef.current[i] = x
+      posYRef.current[i] = y
+      rotRef.current[i] = rotDeg
+
+      const carAnim = cars[i]
+      if (carAnim) {
+        carAnim.x.value = x
+        carAnim.y.value = y
+        carAnim.rotDeg.value = rotDeg
+        const lp = lapsRef.current[i] ?? 0
+        carAnim.laps.value = lp
+        carAnim.progress.value = lp * len + ns
+      }
+    }
+  }, [cars, len, cellAttachDepsKey(cellPx, gapPx, padPx, width), loop, computeDir, TUNE.laneOffset])
+
+  function cellAttachDepsKey(a: number, b: number, c: number, d: number) {
+    return a + b + c + d
+  }
 
   const start = useCallback(() => {
     if (runningRef.current) return
@@ -429,6 +537,11 @@ export function useTrackCars({
 
     runningRef.current = true
     lastTsRef.current = null
+    startAtTsRef.current = null
+    didLayoutRef.current = false
+
+    applyLayoutOnce()
+    didLayoutRef.current = true
 
     const stepPx = cellPx + gapPx
     const halfStep = stepPx / 2
@@ -449,6 +562,23 @@ export function useTrackCars({
 
     const tick = (ts: number) => {
       if (!runningRef.current) return
+
+      if (startAtTsRef.current == null) {
+        startAtTsRef.current = ts + Math.max(0, TUNE.startWaitTime) * 1000
+        lastTsRef.current = ts
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+
+      if (ts < startAtTsRef.current) {
+        if (!didLayoutRef.current) {
+          applyLayoutOnce()
+          didLayoutRef.current = true
+        }
+        lastTsRef.current = ts
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
 
       const last = lastTsRef.current
       lastTsRef.current = ts
@@ -923,6 +1053,7 @@ export function useTrackCars({
     carHFrac,
     carWPx,
     carHPx,
+    applyLayoutOnce,
   ])
 
   useEffect(() => stop, [stop])

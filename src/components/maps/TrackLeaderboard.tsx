@@ -13,9 +13,10 @@ type Props = {
   cars: CarAnim[]
   height?: number
   sampleMs?: number
+  setLeaderId?: (id: number) => void
 }
 
-export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) {
+export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
   const [rows, setRows] = useState<Row[]>([])
 
   useEffect(() => {
@@ -42,7 +43,12 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250 }: Props) 
     }
   }, [cars, sampleMs])
 
-  const leaderProgress = rows[0]?.progress ?? 0
+  const leaderId = rows[0]?.id ?? null
+
+  useEffect(() => {
+    if (leaderId == null) return
+    setLeaderId?.(leaderId)
+  }, [leaderId, setLeaderId])
 
   const fmtGap = useMemo(() => {
     return (gap: number) => {
