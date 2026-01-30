@@ -185,12 +185,12 @@ export function useTrackCars({
       speedVariance: 0.12,
 
       accelRate: 3.5,
-      accelOnStraights: 1.6,
+      accelOnStraights: 2.2,
       streakMax: 10,
 
       cornerMul: 0.42,
-      preBrakeMul: 0.7,
-      preBrakeWindow: 0.35,
+      preBrakeMul: 1,
+      preBrakeWindow: 0.95,
 
       maxMul: 2.0,
       minMul: 0.8,
