@@ -2,6 +2,7 @@ import React from 'react'
 import { StyleSheet } from 'react-native'
 import Animated, { useAnimatedStyle } from 'react-native-reanimated'
 import type { CarAnim } from './useTrackCars'
+import { useSettings } from '../../state/useSettings'
 
 type Props = {
   cars: CarAnim[]
@@ -21,13 +22,14 @@ function CarView({
   carH: number
   leaderId?: number | null
 }) {
+  const enlargedLeader = useSettings((s) => s.enlargedLeader)
   const style = useAnimatedStyle(() => ({
     position: 'absolute',
     transform: [
       { translateX: car.x.value - carW / 2 },
       { translateY: car.y.value - carH / 2 },
       { rotate: `${car.rotDeg.value}deg` },
-      { scale: car.id === leaderId ? 1.3 : 1 },
+      { scale: car.id === leaderId ? (enlargedLeader ? 1.3 : 1) : 1 },
     ],
   }))
 

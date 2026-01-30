@@ -51,7 +51,7 @@ function isSingleTrackLoop(cells: CellType[], size: number) {
     if (d !== 2) {
       return {
         ok: false as const,
-        reason: 'Track must be one closed loop (each track tile needs 2 neighbours)',
+        reason: 'Track must be exactly one closed loop (each track tile needs 2 neighbours)',
       }
     }
   }
@@ -81,7 +81,7 @@ function isSingleTrackLoop(cells: CellType[], size: number) {
   }
 
   if (visited.size !== trackIdx.length) {
-    return { ok: false as const, reason: 'Track must be one complete loop (no separate pieces)' }
+    return { ok: false as const, reason: 'Track must be exactly one complete loop' }
   }
 
   return { ok: true as const }
@@ -202,7 +202,7 @@ export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onS
     }
 
     if (standAreaCount < MIN_STAND_AREA_TILES) {
-      setError(`Need at least ${MIN_STAND_AREA_TILES} stand-area tiles (white)`)
+      setError(`Need at least ${MIN_STAND_AREA_TILES} stand-area tiles`)
       return
     }
 

@@ -53,7 +53,7 @@ export default function MapTrackDetail() {
         <View style={styles.header}>
           <Text style={styles.pageTitle}>{track.name}</Text>
           <Text style={styles.pageSubtitle}>
-            {isEditing ? 'Draw track / stands / grass' : 'Track layout preview'}
+            {isEditing ? 'Draw track / stands / grass' : 'Track Map '}
           </Text>
         </View>
       </View>
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   },
   headerWrap: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 8,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E8E8E8',
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 4,
   },
 
   backButton: {
@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,
+    marginTop: 8,
     borderRadius: 12,
     backgroundColor: '#0B0F14',
   },
