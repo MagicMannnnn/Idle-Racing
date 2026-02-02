@@ -23,9 +23,13 @@ function formatRating(r: number) {
 }
 
 function ratingLabel(r: number) {
+  if (r >= 5.0) return 'World Class'
   if (r >= 4.5) return 'Elite'
+  if (r >= 4.0) return 'Excellent'
   if (r >= 3.5) return 'Great'
-  if (r >= 2.5) return 'Good'
+  if (r >= 3.0) return 'Average'
+  if (r >= 2.5) return 'Emerging'
+  if (r >= 2.0) return 'Developing'
   if (r >= 1.5) return 'Rookie'
   return 'New'
 }

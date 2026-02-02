@@ -94,7 +94,7 @@ function trackCostForIndex(index: number) {
 }
 
 function tierMult(index: number) {
-  return index === 0 ? 0.3 : 2 + Math.pow(index, 4)
+  return index === 0 ? 0.3 : 2 + Math.pow(4, Math.pow(index, 1.1))
 }
 
 function capacityBaseForIndex(index: number) {
@@ -118,7 +118,7 @@ function entertainmentMaxForIndex(index: number) {
   return 35 + index * 5
 }
 
-function capacityLevelCost(index: number, fromLevel: number, toLevel: number) {
+export function capacityLevelCost(index: number, fromLevel: number, toLevel: number) {
   const mult = tierMult(index)
   let total = 0
   for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {

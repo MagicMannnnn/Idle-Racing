@@ -20,12 +20,17 @@ function formatRating(r: number) {
 }
 
 function ratingLabel(r: number) {
+  if (r >= 5.0) return 'World Class'
   if (r >= 4.5) return 'Elite'
+  if (r >= 4.0) return 'Excellent'
   if (r >= 3.5) return 'Great'
-  if (r >= 2.5) return 'Good'
+  if (r >= 3.0) return 'Average'
+  if (r >= 2.5) return 'Emerging'
+  if (r >= 2.0) return 'Developing'
   if (r >= 1.5) return 'Rookie'
   return 'New'
 }
+
 export default function TracksIndex() {
   const tracks = useTracks((s) => s.tracks)
   const nextCost = useTracks((s) => s.nextTrackCost())
@@ -37,6 +42,8 @@ export default function TracksIndex() {
   const [buyOpen, setBuyOpen] = useState(false)
   const [trackName, setTrackName] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  console.log('capacity costs: ', 2 + Math.pow(4, 1))
 
   const avg = useMemo(() => {
     if (tracks.length === 0) return 0

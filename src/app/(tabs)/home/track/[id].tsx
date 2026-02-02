@@ -7,6 +7,7 @@ import { View, Text, Pressable, StyleSheet, Platform, ScrollView } from 'react-n
 import TrackEvents from '@/src/components/events/events'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { formatMoney } from '@/src/components/money/MoneyHeader'
+import { capacityLevelCost } from '@/src/state/useTracks'
 
 export default function TrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
