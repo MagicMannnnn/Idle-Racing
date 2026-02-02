@@ -292,7 +292,6 @@ export function useTrackCars({
     runningRef.current = false
     lastTsRef.current = null
     startAtTsRef.current = null
-    didLayoutRef.current = false
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = null
@@ -359,6 +358,7 @@ export function useTrackCars({
   const newRace = useCallback(() => {
     stop()
     seedNewRaceRefs()
+    didLayoutRef.current = false
   }, [seedNewRaceRefs, stop])
 
   useEffect(() => {
@@ -546,10 +546,8 @@ export function useTrackCars({
     runningRef.current = true
     lastTsRef.current = null
     startAtTsRef.current = null
-    didLayoutRef.current = false
 
     applyLayoutOnce()
-    didLayoutRef.current = true
 
     const stepPx = cellPx + gapPx
     const halfStep = stepPx / 2
@@ -572,8 +570,11 @@ export function useTrackCars({
       if (!runningRef.current) return
 
       if (startAtTsRef.current == null) {
-        startAtTsRef.current = ts + Math.max(0, TUNE.startWaitTime) * 1000
+        startAtTsRef.current = didLayoutRef.current
+          ? ts
+          : ts + Math.max(0, TUNE.startWaitTime) * 1000
         lastTsRef.current = ts
+        didLayoutRef.current = true
         rafRef.current = requestAnimationFrame(tick)
         return
       }
