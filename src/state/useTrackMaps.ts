@@ -12,6 +12,7 @@ export type TrackGrid = {
 
 export type TrackMapState = {
   byTrackId: Record<string, TrackGrid | undefined>
+  carNames?: string[]
 
   get: (trackId: string) => TrackGrid | undefined
 
@@ -20,6 +21,9 @@ export type TrackMapState = {
 
   setCell: (trackId: string, x: number, y: number, type: CellType) => void
   setCells: (trackId: string, cells: CellType[]) => void
+
+  setCarName: (carIndex: number, name: string) => void
+  getCarNames: () => string[]
 
   clear: (trackId: string) => void
 
@@ -225,7 +229,6 @@ export const useTrackMaps = create<TrackMapState>()(
         for (let i = 0; i < next.length; i++) {
           if (next[i] === 'stand') next[i] = 'empty'
         }
-
         set((s) => ({
           byTrackId: {
             ...s.byTrackId,
@@ -234,7 +237,20 @@ export const useTrackMaps = create<TrackMapState>()(
         }))
       },
 
-      clear: (trackId) => {
+      setCarName: (carIndex: number, name: string) => {
+        set((state) => {
+          const carNames = state.carNames ? [...state.carNames] : []
+          carNames[carIndex] = name
+          return { ...state, carNames }
+        })
+      },
+
+      getCarNames: () => {
+        const carNames = get().carNames
+        return carNames ? carNames : []
+      },
+
+      clear: (trackId: string) => {
         const grid = get().byTrackId[trackId]
         if (!grid) return
         set((s) => ({
