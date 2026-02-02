@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { CarAnim } from './useTrackCars'
+import { useTrackMaps } from '@/src/state/useTrackMaps'
 
 type Row = {
   id: number
@@ -18,6 +19,7 @@ type Props = {
 
 export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
   const [rows, setRows] = useState<Row[]>([])
+  const carNames = useTrackMaps((s) => s.carNames || [])
 
   useEffect(() => {
     let alive = true
@@ -79,6 +81,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
         showsVerticalScrollIndicator={false}
       >
         {rows.map((r, idx) => {
+          const name = `${carNames[r.id - 1] || 'Car'} (${r.id})`
           const gap = idx === 0 ? 0 : prevProgress - r.progress
           prevProgress = r.progress
           return (
@@ -87,7 +90,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
 
               <View style={styles.nameWrap}>
                 <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
-                <Text style={[styles.cell, styles.name]}>{`Car ${r.id}`}</Text>
+                <Text style={[styles.cell, styles.name]}>{name}</Text>
               </View>
 
               <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>
