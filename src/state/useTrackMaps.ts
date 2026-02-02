@@ -182,6 +182,7 @@ export const useTrackMaps = create<TrackMapState>()(
   persist(
     (set, get) => ({
       byTrackId: {},
+      carNames: [],
 
       get: (trackId) => get().byTrackId[trackId],
 
@@ -241,7 +242,7 @@ export const useTrackMaps = create<TrackMapState>()(
         set((state) => {
           const carNames = state.carNames ? [...state.carNames] : []
           carNames[carIndex] = name
-          return { ...state, carNames }
+          return { carNames }
         })
       },
 

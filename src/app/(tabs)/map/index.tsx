@@ -1,4 +1,6 @@
+import { useMoney } from '@/src/state/useMoney'
 import { useOnboarding } from '@/src/state/useOnboarding'
+import { useTrackMaps } from '@/src/state/useTrackMaps'
 import { useTracks } from '@/src/state/useTracks'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
@@ -30,6 +32,59 @@ function ratingLabel(r: number) {
 export default function MapIndex() {
   const tracks = useTracks((s) => s.tracks)
 
+  const [buyOpen, setBuyOpen] = useState(false)
+  const [carName, setCarName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const carNames = useTrackMaps((s) => s.carNames)
+  const setNewCarName = useTrackMaps((s) => s.setCarName)
+  const canAfford = useMoney((s) => s.canAfford)
+  const removeMoney = useMoney((s) => s.remove)
+
+  const defaultCarNames: string[] = [
+    'Castle Corner',
+    'Castle Hill',
+    'Castle Curve',
+    'Castle Loop',
+    'Castle Valley',
+    'Castle Ridge',
+    'Castle Peak',
+    'Castle Forest',
+    'Castle River',
+    'Castle Plains',
+  ]
+
+  const onOpenBuy = () => {
+    setError(null)
+    setCarName('')
+    setBuyOpen(true)
+  }
+
+  const onCancelBuy = () => {
+    setBuyOpen(false)
+    setError(null)
+  }
+
+  const nextCost = useMemo(() => {
+    return 100 + Math.pow(carNames?.length || 0, 3) * 250
+  }, [carNames])
+
+  //console.log(Array.from({ length: 50 }, (_, i) => 100 + Math.pow(i, 3) * 250))
+
+  const onConfirmBuy = () => {
+    if (!canAfford(nextCost)) {
+      setError('Not enough money.')
+      return
+    }
+    setBuyOpen(false)
+    setError(null)
+    removeMoney(nextCost)
+    const currentLength = carNames?.length || 0
+    setNewCarName(
+      currentLength,
+      carName.trim() || defaultCarNames[tracks.length % defaultCarNames.length],
+    )
+  }
+
   const avg = useMemo(() => {
     if (tracks.length === 0) return 0
     return tracks.reduce((a, t) => a + t.rating, 0) / tracks.length
@@ -44,6 +99,13 @@ export default function MapIndex() {
             {tracks.length} track{tracks.length === 1 ? '' : 's'} • Avg ⭐ {formatRating(avg)}
           </Text>
         </View>
+        <Pressable
+          onPress={onOpenBuy}
+          style={({ pressed }) => [styles.buyBtn, pressed && styles.buyBtnPressed]}
+        >
+          <Text style={styles.buyBtnText}>Buy Car Name • {formatMoney(nextCost)}</Text>
+          <Ionicons name="disc-outline" size={18} color="#F5C542" />
+        </Pressable>
       </View>
 
       <FlatList
@@ -87,6 +149,50 @@ export default function MapIndex() {
           </View>
         }
       />
+
+      <Modal visible={buyOpen} transparent animationType="fade" onRequestClose={onCancelBuy}>
+        <Pressable style={styles.modalBackdrop} onPress={onCancelBuy}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Buy Car Name</Text>
+
+            <Text style={styles.modalLabel}>Car name</Text>
+            <TextInput
+              value={carName}
+              onChangeText={(v) => {
+                setCarName(v)
+                setError(null)
+              }}
+              placeholder={`e.g. ${defaultCarNames[tracks.length % defaultCarNames.length]}`}
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              style={styles.input}
+              autoCapitalize="words"
+              returnKeyType="done"
+            />
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={onCancelBuy}
+                style={({ pressed }) => [styles.btn, styles.btnGhost, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.btnGhostText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={onConfirmBuy}
+                style={({ pressed }) => [
+                  styles.btn,
+                  styles.btnPrimary,
+                  pressed && styles.btnPressed,
+                ]}
+              >
+                <Text style={styles.btnPrimaryText}>Buy</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
