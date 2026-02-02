@@ -20,6 +20,7 @@ type Props = {
 export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
   const [rows, setRows] = useState<Row[]>([])
   const carNames = useTrackMaps((s) => s.carNames || [])
+  const carNumbers = useTrackMaps((s) => s.carNumbers || [])
 
   useEffect(() => {
     let alive = true
@@ -80,24 +81,43 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {rows.map((r, idx) => {
-          const name = `${carNames[r.id - 1] || 'Car'} (${r.id})`
-          const gap = idx === 0 ? 0 : prevProgress - r.progress
-          prevProgress = r.progress
-          return (
-            <View key={r.id} style={[styles.row, idx === 0 && styles.rowLeader]}>
-              <Text style={[styles.cell, styles.pos]}>{idx + 1}</Text>
+        {(() => {
+          const usedNumbers = new Set<number>()
+          let prevProgress = 0
+          
+          return rows.map((r, idx) => {
+            const carNumber = carNumbers[r.id - 1]
 
-              <View style={styles.nameWrap}>
-                <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
-                <Text style={[styles.cell, styles.name]}>{name}</Text>
+            let displayNumber: number
+            if (carNumber !== undefined) {
+              displayNumber = carNumber
+            } else {
+              displayNumber = r.id
+              while (usedNumbers.has(displayNumber)) {
+                displayNumber++
+              }
+            }
+            
+            usedNumbers.add(displayNumber)
+
+            const name = `${carNames[r.id - 1] || 'Car'} #${displayNumber}`
+            const gap = idx === 0 ? 0 : prevProgress - r.progress
+            prevProgress = r.progress
+            return (
+              <View key={r.id} style={[styles.row, idx === 0 && styles.rowLeader]}>
+                <Text style={[styles.cell, styles.pos]}>{idx + 1}</Text>
+
+                <View style={styles.nameWrap}>
+                  <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
+                  <Text style={[styles.cell, styles.name]}>{name}</Text>
+                </View>
+
+                <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>
+                <Text style={[styles.cell, styles.gap]}>{idx === 0 ? '—' : fmtGap(gap)}</Text>
               </View>
-
-              <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>
-              <Text style={[styles.cell, styles.gap]}>{idx === 0 ? '—' : fmtGap(gap)}</Text>
-            </View>
-          )
-        })}
+            )
+          })
+        })()}
 
         {!rows.length ? <Text style={styles.empty}>No cars</Text> : null}
       </ScrollView>

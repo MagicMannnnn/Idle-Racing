@@ -14,6 +14,7 @@ import {
   Platform,
   Modal,
   TextInput,
+  ScrollView,
 } from 'react-native'
 import { formatMoney } from '@/src/components/money/MoneyHeader'
 
@@ -33,29 +34,49 @@ export default function MapIndex() {
   const tracks = useTracks((s) => s.tracks)
 
   const [buyOpen, setBuyOpen] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
   const [carName, setCarName] = useState('')
+  const [carNumber, setCarNumber] = useState('')
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const carNames = useTrackMaps((s) => s.carNames)
+  const carNumbers = useTrackMaps((s) => s.carNumbers)
   const setNewCarName = useTrackMaps((s) => s.setCarName)
   const canAfford = useMoney((s) => s.canAfford)
   const removeMoney = useMoney((s) => s.remove)
 
   const defaultCarNames: string[] = [
-    'Castle Corner',
-    'Castle Hill',
-    'Castle Curve',
-    'Castle Loop',
-    'Castle Valley',
-    'Castle Ridge',
-    'Castle Peak',
-    'Castle Forest',
-    'Castle River',
-    'Castle Plains',
+    'Bob',
+    'Sally',
+    'Max',
+    'Caitlin',
+    'Mark',
+    'Jesse',
+    'Alex',
+    'Jordan',
+    'Casey',
+    'Riley',
+    'Jamie',
+    'Cameron',
+    'Ellie',
+    'Sam',
+    'Charlie',
   ]
 
   const onOpenBuy = () => {
     setError(null)
     setCarName('')
+    setCarNumber('')
+    setEditingIndex(null)
+    setBuyOpen(true)
+  }
+
+  const onOpenEdit = (index: number) => {
+    setManageOpen(false)
+    setError(null)
+    setCarName(carNames?.[index] || '')
+    setCarNumber(carNumbers?.[index]?.toString() || '')
+    setEditingIndex(index)
     setBuyOpen(true)
   }
 
@@ -65,8 +86,9 @@ export default function MapIndex() {
   }
 
   const nextCost = useMemo(() => {
-    return 100 + Math.pow(carNames?.length || 0, 3) * 250
-  }, [carNames])
+    const index = editingIndex !== null ? editingIndex : carNames?.length || 0
+    return 100 + Math.pow(index, 3) * 250
+  }, [carNames, editingIndex])
 
   //console.log(Array.from({ length: 50 }, (_, i) => 100 + Math.pow(i, 3) * 250))
 
@@ -78,11 +100,15 @@ export default function MapIndex() {
     setBuyOpen(false)
     setError(null)
     removeMoney(nextCost)
-    const currentLength = carNames?.length || 0
+
+    const targetIndex = editingIndex !== null ? editingIndex : carNames?.length || 0
+    const parsedNumber = carNumber.trim() ? parseInt(carNumber.trim(), 10) : undefined
     setNewCarName(
-      currentLength,
-      carName.trim() || defaultCarNames[tracks.length % defaultCarNames.length],
+      targetIndex,
+      carName.trim() || defaultCarNames[targetIndex % defaultCarNames.length],
+      parsedNumber && !isNaN(parsedNumber) ? parsedNumber : undefined,
     )
+    setEditingIndex(null)
   }
 
   const avg = useMemo(() => {
@@ -100,11 +126,11 @@ export default function MapIndex() {
           </Text>
         </View>
         <Pressable
-          onPress={onOpenBuy}
-          style={({ pressed }) => [styles.buyBtn, pressed && styles.buyBtnPressed]}
+          onPress={() => setManageOpen(true)}
+          style={({ pressed }) => [styles.manageBtn, pressed && styles.manageBtnPressed]}
         >
-          <Text style={styles.buyBtnText}>Buy Car Name • {formatMoney(nextCost)}</Text>
-          <Ionicons name="disc-outline" size={18} color="#F5C542" />
+          <Text style={styles.manageBtnText}>Manage Car Names</Text>
+          <Ionicons name="create-outline" size={18} color="#F5C542" />
         </Pressable>
       </View>
 
@@ -149,11 +175,79 @@ export default function MapIndex() {
           </View>
         }
       />
+      <Modal
+        visible={manageOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setManageOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={styles.modalBackdropTouchable} onPress={() => setManageOpen(false)} />
+          <View style={styles.manageModalCard}>
+            <View style={styles.manageHeader}>
+              <Text style={styles.modalTitle}>Manage Car Names</Text>
+              <Pressable onPress={() => setManageOpen(false)}>
+                <Ionicons name="close" size={24} color="rgba(255,255,255,0.85)" />
+              </Pressable>
+            </View>
 
+            <ScrollView
+              style={styles.manageFlatList}
+              contentContainerStyle={styles.manageScrollContent}
+              showsVerticalScrollIndicator={true}
+            >
+              {(() => {
+                const usedNumbers = new Set<number>()
+                const totalCars = tracks.length * 5 + 5
+
+                return Array.from({ length: totalCars }, (_, idx) => idx).map((idx) => {
+                  const name = carNames?.[idx]
+                  const number = carNumbers?.[idx]
+
+                  let displayNumber: number
+                  if (number !== undefined) {
+                    displayNumber = number
+                  } else {
+                    displayNumber = idx + 1
+                    while (usedNumbers.has(displayNumber)) {
+                      displayNumber++
+                    }
+                  }
+
+                  usedNumbers.add(displayNumber)
+
+                  const editCost = 100 + Math.pow(idx, 3) * 250
+                  return (
+                    <View key={idx} style={styles.manageCarItem}>
+                      <View style={styles.manageCarInfo}>
+                        <Text style={styles.manageCarName}>
+                          {name || `Car`} #{displayNumber}
+                        </Text>
+                        <Text style={styles.manageCarIndex}>Car {idx + 1}</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => onOpenEdit(idx)}
+                        style={({ pressed }) => [
+                          styles.manageEditBtn,
+                          pressed && styles.manageEditBtnPressed,
+                        ]}
+                      >
+                        <Text style={styles.manageEditText}>Edit • {formatMoney(editCost)}</Text>
+                      </Pressable>
+                    </View>
+                  )
+                })
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       <Modal visible={buyOpen} transparent animationType="fade" onRequestClose={onCancelBuy}>
         <Pressable style={styles.modalBackdrop} onPress={onCancelBuy}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Buy Car Name</Text>
+            <Text style={styles.modalTitle}>
+              {editingIndex !== null ? `Edit Car ${editingIndex + 1}` : 'Buy Car Name'}
+            </Text>
 
             <Text style={styles.modalLabel}>Car name</Text>
             <TextInput
@@ -166,6 +260,20 @@ export default function MapIndex() {
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.input}
               autoCapitalize="words"
+              returnKeyType="next"
+            />
+
+            <Text style={[styles.modalLabel, { marginTop: 12 }]}>Car number (optional)</Text>
+            <TextInput
+              value={carNumber}
+              onChangeText={(v) => {
+                setCarNumber(v)
+                setError(null)
+              }}
+              placeholder="e.g. 7"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              style={styles.input}
+              keyboardType="number-pad"
               returnKeyType="done"
             />
 
@@ -187,7 +295,9 @@ export default function MapIndex() {
                   pressed && styles.btnPressed,
                 ]}
               >
-                <Text style={styles.btnPrimaryText}>Buy</Text>
+                <Text style={styles.btnPrimaryText}>
+                  {editingIndex !== null ? 'Update' : 'Buy'} • {formatMoney(nextCost)}
+                </Text>
               </Pressable>
             </View>
           </Pressable>
@@ -223,7 +333,7 @@ const styles = StyleSheet.create({
     color: 'rgba(11,15,20,0.65)',
   },
 
-  buyBtn: {
+  manageBtn: {
     marginTop: 2,
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,7 +344,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B0F14',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.12)',
-
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -245,14 +354,81 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  buyBtnPressed: {
+  manageBtnPressed: {
     transform: [{ scale: 0.99 }],
     opacity: 0.95,
   },
-  buyBtnText: {
+  manageBtnText: {
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 14,
+  },
+
+  manageModalCard: {
+    backgroundColor: '#141414',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    height: '80%',
+    marginHorizontal: 18,
+    overflow: 'hidden',
+    flexDirection: 'column',
+  },
+  manageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  manageFlatList: {
+    flex: 1,
+  },
+  manageScrollContent: {
+    padding: 12,
+  },
+  manageCarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: 12,
+    marginBottom: 8,
+  },
+  manageCarInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  manageCarName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  manageCarIndex: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: '600',
+  },
+  manageEditBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  manageEditBtnPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  manageEditText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0B0F14',
   },
 
   listContent: {
@@ -342,6 +518,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     padding: 18,
+  },
+  modalBackdropTouchable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   modalCard: {
     backgroundColor: '#141414',
