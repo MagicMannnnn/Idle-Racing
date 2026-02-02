@@ -312,12 +312,17 @@ export function useTrackCars({
     const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
     const anchor = len - 1e-3
 
-    for (let i = 0; i < safeCarCount; i++) {
+    // Shuffle the car indices to randomize starting positions
+    const carIndices = Array.from({ length: safeCarCount }, (_, i) => i)
+    const shuffledIndices = shuffle(carIndices, rand)
+
+    for (let posIdx = 0; posIdx < safeCarCount; posIdx++) {
+      const i = shuffledIndices[posIdx]
       const variance = 1 + (rand() * 2 - 1) * TUNE.speedVariance
       const base = TUNE.baseSpeed * variance
 
       const jitter = (rand() * 2 - 1) * TUNE.packJitter
-      const s0 = (anchor - i * spacing + jitter + len) % len
+      const s0 = (anchor - posIdx * spacing + jitter + len) % len
 
       sRef.current[i] = s0
       vRef.current[i] = base
@@ -384,7 +389,8 @@ export function useTrackCars({
     const created: CarAnim[] = []
     const ids: number[] = []
 
-    const colorPalette = shuffle(generateColorPalette(safeCarCount), mulberry32(Date.now()))
+    // Generate colors based on car ID (not shuffled) for consistency
+    const colorPalette = generateColorPalette(safeCarCount)
 
     for (let i = 0; i < safeCarCount; i++) {
       const id = nextIdRef.current++
@@ -396,7 +402,7 @@ export function useTrackCars({
         rotDeg: makeMutable(0),
         progress: makeMutable(0),
         laps: makeMutable(0),
-        colorHex: colorPalette[i],
+        colorHex: colorPalette[id - 1], // Color based on ID
       })
     }
 

@@ -12,6 +12,8 @@ export type TrackGrid = {
 
 export type TrackMapState = {
   byTrackId: Record<string, TrackGrid | undefined>
+  carNames?: string[]
+  carNumbers?: number[]
 
   get: (trackId: string) => TrackGrid | undefined
 
@@ -20,6 +22,10 @@ export type TrackMapState = {
 
   setCell: (trackId: string, x: number, y: number, type: CellType) => void
   setCells: (trackId: string, cells: CellType[]) => void
+
+  setCarName: (carIndex: number, name: string, carNumber?: number) => void
+  getCarNames: () => string[]
+  getCarNumbers: () => number[]
 
   clear: (trackId: string) => void
 
@@ -178,6 +184,8 @@ export const useTrackMaps = create<TrackMapState>()(
   persist(
     (set, get) => ({
       byTrackId: {},
+      carNames: [],
+      carNumbers: [],
 
       get: (trackId) => get().byTrackId[trackId],
 
@@ -225,7 +233,6 @@ export const useTrackMaps = create<TrackMapState>()(
         for (let i = 0; i < next.length; i++) {
           if (next[i] === 'stand') next[i] = 'empty'
         }
-
         set((s) => ({
           byTrackId: {
             ...s.byTrackId,
@@ -234,7 +241,29 @@ export const useTrackMaps = create<TrackMapState>()(
         }))
       },
 
-      clear: (trackId) => {
+      setCarName: (carIndex: number, name: string, carNumber?: number) => {
+        set((state) => {
+          const carNames = state.carNames ? [...state.carNames] : []
+          const carNumbers = state.carNumbers ? [...state.carNumbers] : []
+          carNames[carIndex] = name
+          if (carNumber !== undefined) {
+            carNumbers[carIndex] = carNumber
+          }
+          return { carNames, carNumbers }
+        })
+      },
+
+      getCarNames: () => {
+        const carNames = get().carNames
+        return carNames ? carNames : []
+      },
+
+      getCarNumbers: () => {
+        const carNumbers = get().carNumbers
+        return carNumbers ? carNumbers : []
+      },
+
+      clear: (trackId: string) => {
         const grid = get().byTrackId[trackId]
         if (!grid) return
         set((s) => ({
