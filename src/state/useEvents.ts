@@ -31,7 +31,6 @@ type EventsState = {
   ) => { ok: true } | { ok: false; reason: 'already_running' | 'in_cooldown' | 'track_not_found' }
   stopTrackDay: (trackId: string) => { ok: true } | { ok: false; reason: 'not_running' }
 
-  // ✅ new: enable x2 income for the remainder of the current event
   setIncomeBoost: (
     trackId: string,
     enabled: boolean,
@@ -77,7 +76,7 @@ function cooldownForRuntime(runtimeMs: number) {
 }
 
 function peopleCounts(capacity: number, trackSize: number, rng: () => number) {
-  const attBase = capacity * (0.35 + rng() * 0.55)
+  const attBase = capacity * (0.45 + rng() * 0.55)
   const attendees = Math.max(0, Math.round(attBase))
 
   const sizeN = clamp(trackSize / 250, 0.3, 2.5)
