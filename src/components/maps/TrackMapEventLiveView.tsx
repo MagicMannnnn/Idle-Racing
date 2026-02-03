@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { ScrollView, StyleSheet, View, useWindowDimensions, Platform } from 'react-native'
 import { useIsFocused } from '@react-navigation/native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -239,15 +239,23 @@ export function TrackMapEventLiveView({
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
   const isLandscape = windowWidth > windowHeight
+  const isWeb = Platform.OS === 'web'
 
   const cellPx = useMemo(() => {
     // Calculate max size: either windowWidth - 32, or 80% of height
-    const maxSize = Math.min(windowWidth - 32, windowHeight * 0.8)
+    const maxSize = isWeb
+      ? Math.min(windowWidth - (isLandscape ? 420 : 60), windowHeight - 280)
+      : Math.min(windowWidth - 32, windowHeight * 0.8)
     const inner = maxSize - GRID_PAD * 2 - GRID_GAP * (mapSize - 1)
     return Math.max(6, Math.floor(inner / mapSize))
-  }, [windowWidth, windowHeight, mapSize])
+  }, [windowWidth, windowHeight, mapSize, isWeb, isLandscape])
 
   const wrapW = cellPx * mapSize + GRID_GAP * (mapSize - 1) + GRID_PAD * 2
+
+  const leaderboardHeight = useMemo(() => {
+    if (!isWeb) return 470
+    return Math.max(300, windowHeight - 280)
+  }, [isWeb, windowHeight])
 
   const loop = useMemo(() => buildTrackLoop(cells ?? [], mapSize), [cells, mapSize])
 
@@ -517,19 +525,18 @@ export function TrackMapEventLiveView({
   }, [cells, mapSize, trackKerbsByIndex])
 
   return (
-    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        contentInsetAdjustmentBehavior="never"
-      >
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+      {isWeb ? (
         <View
           style={{
+            flex: 1,
             flexDirection: isLandscape ? 'row' : 'column',
             alignSelf: 'center',
             gap: 12,
             alignItems: isLandscape ? 'flex-start' : 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 24,
           }}
         >
           <View style={{ width: wrapW, alignSelf: 'center' }}>
@@ -604,10 +611,101 @@ export function TrackMapEventLiveView({
           </View>
 
           <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
-            <TrackLeaderboard cars={cars} height={470} setLeaderId={setLeaderId} />
+            <TrackLeaderboard cars={cars} height={leaderboardHeight} setLeaderId={setLeaderId} />
           </View>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          contentInsetAdjustmentBehavior="never"
+        >
+          <View
+            style={{
+              flexDirection: isLandscape ? 'row' : 'column',
+              alignSelf: 'center',
+              gap: 12,
+              alignItems: isLandscape ? 'flex-start' : 'center',
+            }}
+          >
+            <View style={{ width: wrapW, alignSelf: 'center' }}>
+              <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
+                {Array.from({ length: mapSize * mapSize }).map((_, i) => {
+                  const x = i % mapSize
+                  const y = Math.floor(i / mapSize)
+
+                  const type = cells[i] ?? 'empty'
+
+                  const showStand = type === 'empty' && standSet.has(i)
+                  const standRotation = showStand
+                    ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
+                    : '0deg'
+
+                  const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
+                  const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
+
+                  return (
+                    <View
+                      key={`${trackId}_${i}`}
+                      style={[
+                        styles.cell,
+                        {
+                          width: cellPx,
+                          height: cellPx,
+                          marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
+                          marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+                        },
+                        type === 'empty' && styles.empty,
+                        type === 'infield' && styles.infield,
+                        type === 'track' && styles.track,
+                      ]}
+                    >
+                      {i === firstTrackIdx && type === 'track' ? (
+                        <CheckerboardOverlay size={cellPx} />
+                      ) : null}
+                      {type === 'track' && trackKerb ? (
+                        <>
+                          {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
+                          {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
+                          {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
+                          {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
+                        </>
+                      ) : null}
+
+                      {innerCorners?.length
+                        ? innerCorners.map((c) => (
+                            <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />
+                          ))
+                        : null}
+
+                      {showStand && (
+                        <StandIcon
+                          standRotation={standRotation}
+                          seed={fnv1a32(trackId + i)}
+                          minDotsPerBar={
+                            entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
+                          }
+                          entertainmentValue={entertainmentValue}
+                          size={Math.max(cellPx * 0.1, 6)}
+                        />
+                      )}
+                    </View>
+                  )
+                })}
+
+                {showCarsVisual ? (
+                  <CellCars cars={cars} carW={cellPx / 6} carH={cellPx / 4} leaderId={leaderId} />
+                ) : null}
+              </View>
+            </View>
+
+            <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
+              <TrackLeaderboard cars={cars} height={470} setLeaderId={setLeaderId} />
+            </View>
+          </View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   )
 }

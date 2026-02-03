@@ -20,7 +20,7 @@ export default function MapTrackDetail() {
 
   const initialGridSize = useMemo(() => {
     if (!track) return 5
-    return 5 + track.index * 2
+    return track.index < 2 ? 5 + track.index * 2 : 6 + track.index
   }, [track])
 
   if (!track) {
@@ -37,7 +37,7 @@ export default function MapTrackDetail() {
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.headerWrap}>
         <View style={styles.headerTopRow}>
-          <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={10}>
+          <Pressable onPress={() => router.navigate('/map')} style={styles.backButton} hitSlop={10}>
             <Text style={styles.backIcon}>‹</Text>
             <Text style={styles.backText}>Back</Text>
           </Pressable>
@@ -65,14 +65,14 @@ export default function MapTrackDetail() {
         {isEditing ? (
           <TrackMapEditor
             trackId={track.id}
-            sizePx={size}
+            sizePx={size * 0.8}
             initialGridSize={initialGridSize}
             onSaved={() => setIsEditing(false)}
           />
         ) : (
           <TrackMapEventLiveView
             trackId={track.id}
-            sizePx={size}
+            sizePx={size * 0.8}
             initialGridSize={initialGridSize}
             capacity={track.capacity}
             maxCapacity={track.maxCapacity}

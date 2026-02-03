@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { View, Text, Pressable, Alert, StyleSheet, ScrollView } from 'react-native'
+import { View, Text, Pressable, Alert, StyleSheet, ScrollView, Platform } from 'react-native'
 import Slider from '@react-native-community/slider'
 import { router } from 'expo-router'
 import { useOnboarding } from '../state/useOnboarding'
@@ -31,6 +31,8 @@ export default function SettingsScreen() {
 
   const toggleLabel = useMemo(() => (enlargedLeader ? 'On' : 'Off'), [enlargedLeader])
   const adsToggleLabel = useMemo(() => (enableAds ? 'On' : 'Off'), [enableAds])
+
+  const isWeb = Platform.OS === 'web'
 
   function doReset() {
     resetOnboarding()
@@ -95,20 +97,32 @@ export default function SettingsScreen() {
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Enable ads</Text>
-              <Text style={styles.rowSubtitle}>Optionally watch ads to earn rewards.</Text>
+              <Text style={styles.rowSubtitle}>
+                {isWeb
+                  ? 'Ads are only supported on the app version.'
+                  : 'Optionally watch ads to earn rewards.'}
+              </Text>
             </View>
 
             <Pressable
-              onPress={() => setEnableAds(!enableAds)}
+              onPress={() => !isWeb && setEnableAds(!enableAds)}
+              disabled={isWeb}
               style={({ pressed }) => [
                 styles.pill,
-                enableAds ? styles.pillOn : styles.pillOff,
-                pressed && styles.pressed,
+                enableAds && !isWeb ? styles.pillOn : styles.pillOff,
+                isWeb && styles.pillDisabled,
+                pressed && !isWeb && styles.pressed,
               ]}
               hitSlop={10}
             >
-              <Text style={[styles.pillText, enableAds ? styles.pillTextOn : styles.pillTextOff]}>
-                {adsToggleLabel}
+              <Text
+                style={[
+                  styles.pillText,
+                  enableAds && !isWeb ? styles.pillTextOn : styles.pillTextOff,
+                  isWeb && styles.pillTextDisabled,
+                ]}
+              >
+                {!isWeb ? adsToggleLabel : 'Off'}
               </Text>
             </Pressable>
           </View>
@@ -286,6 +300,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
 
+  pillDisabled: {
+    opacity: 0.4,
+  },
+
   pillText: {
     fontSize: 13,
     fontWeight: '800',
@@ -298,6 +316,10 @@ const styles = StyleSheet.create({
 
   pillTextOff: {
     color: 'rgba(255,255,255,0.75)',
+  },
+
+  pillTextDisabled: {
+    color: 'rgba(255,255,255,0.5)',
   },
 
   valuePill: {

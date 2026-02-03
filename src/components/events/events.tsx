@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useEvents } from '@/src/state/useEvents'
 import { formatMoney } from '@/src/components/money/MoneyHeader'
 import { useRewardedAd } from '@/src/ads/useRewardedAd'
@@ -43,16 +43,16 @@ export default function TrackEvents(props: { track: TrackLike }) {
   const [stepIdx, setStepIdx] = useState(0)
 
   // ✅ Subscribe directly (fixes “need to navigate away/back”)
-  const active = useEvents((s) => s.activeByTrack[track.id])
+  const active = useEvents((s: any) => s.activeByTrack[track.id])
 
-  const startTrackDay = useEvents((s) => s.startTrackDay)
-  const startTicker = useEvents((s) => s.startTicker)
-  const tickOnce = useEvents((s) => s.tickOnce)
+  const startTrackDay = useEvents((s: any) => s.startTrackDay)
+  const startTicker = useEvents((s: any) => s.startTicker)
+  const tickOnce = useEvents((s: any) => s.tickOnce)
 
-  const locked = useEvents((s) => s.isTrackLocked(track.id, now))
-  const cooldownMs = useEvents((s) => s.getCooldownRemainingMs(track.id, now))
+  const locked = useEvents((s: any) => s.isTrackLocked(track.id, now))
+  const cooldownMs = useEvents((s: any) => s.getCooldownRemainingMs(track.id, now))
   const inCooldown = cooldownMs > 0
-  const enableAds = useSettings((s) => s.enableAds)
+  const enableAds = useSettings((s: any) => s.enableAds) && Platform.OS !== 'web'
 
   const { loaded, showing, show } = useRewardedAd({
     adUnitId: rewardedAdUnitId,
@@ -130,28 +130,30 @@ export default function TrackEvents(props: { track: TrackLike }) {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Events</Text>
 
-        <Pressable
-          onPress={onX2Press}
-          disabled={x2Disabled}
-          hitSlop={10}
-          style={({ pressed }) => [
-            styles.x2Btn,
-            x2Disabled && styles.x2BtnDisabled,
-            pressed && !x2Disabled && styles.pressed,
-          ]}
-        >
-          <Text style={[styles.x2BtnText, x2Disabled && styles.x2BtnTextDisabled]}>
-            {isBoosted
-              ? 'x2 active'
-              : tooLateForX2
-                ? 'x2 (too late)'
-                : showing
-                  ? 'playing…'
-                  : loaded
-                    ? 'x2 income'
-                    : 'loading…'}
-          </Text>
-        </Pressable>
+        {enableAds && (
+          <Pressable
+            onPress={onX2Press}
+            disabled={x2Disabled}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.x2Btn,
+              x2Disabled && styles.x2BtnDisabled,
+              pressed && !x2Disabled && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.x2BtnText, x2Disabled && styles.x2BtnTextDisabled]}>
+              {isBoosted
+                ? 'x2 active'
+                : tooLateForX2
+                  ? 'x2 (too late)'
+                  : showing
+                    ? 'playing…'
+                    : loaded
+                      ? 'x2 income'
+                      : 'loading…'}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.card}>
