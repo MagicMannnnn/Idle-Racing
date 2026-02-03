@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { useMoney } from '@/src/state/useMoney'
 import { useTracks } from '@/src/state/useTracks'
+import { usePrestige } from '@/src/state/usePrestige'
 
 export type TrackDayEvent = {
   trackId: string
@@ -117,11 +118,12 @@ function simulate(event: TrackDayEvent, now: number) {
   let carry = event.carry
 
   const mult = event.incomeX2 ? 2 : 1
+  const prestigeMult = usePrestige.getState().calculateEarningsMultiplier()
 
   for (let i = 0; i < seconds; i++) {
     const r = earningsPerSecond(t.capacity, t.trackSize, t.rating, seed)
     seed = r.nextSeed
-    carry += r.perSec * mult
+    carry += r.perSec * mult * prestigeMult
   }
 
   const creditable = Math.floor(carry)

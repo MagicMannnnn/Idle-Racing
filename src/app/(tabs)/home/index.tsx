@@ -1,5 +1,6 @@
 import { useOnboarding } from '@/src/state/useOnboarding'
 import { useTracks } from '@/src/state/useTracks'
+import { usePrestige } from '@/src/state/usePrestige'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
@@ -36,14 +37,18 @@ export default function TracksIndex() {
   const nextCost = useTracks((s) => s.nextTrackCost())
   const buyNextTrack = useTracks((s) => s.buyNextTrack)
 
+  const calculateKnowledge = usePrestige((s) => s.calculateKnowledge)
+  const prestige = usePrestige((s) => s.prestige)
+  const totalKnowledge = usePrestige((s) => s.totalKnowledge)
+  const earningsMultiplier = usePrestige((s) => s.calculateEarningsMultiplier())
+
   const completed = useOnboarding((s) => s.completed)
   const setStage = useOnboarding((s) => s.setStage)
 
   const [buyOpen, setBuyOpen] = useState(false)
+  const [prestigeOpen, setPrestigeOpen] = useState(false)
   const [trackName, setTrackName] = useState('')
   const [error, setError] = useState<string | null>(null)
-
-  console.log('capacity costs: ', 2 + Math.pow(4, 1))
 
   const avg = useMemo(() => {
     if (tracks.length === 0) return 0
@@ -85,6 +90,21 @@ export default function TracksIndex() {
 
     if (!completed) setStage(1)
   }
+
+  const onOpenPrestige = () => {
+    setPrestigeOpen(true)
+  }
+
+  const onCancelPrestige = () => {
+    setPrestigeOpen(false)
+  }
+
+  const onConfirmPrestige = () => {
+    prestige()
+    setPrestigeOpen(false)
+  }
+
+  const knowledgeToGain = useMemo(() => calculateKnowledge(), [calculateKnowledge, tracks])
 
   return (
     <View style={styles.screen}>
@@ -145,7 +165,73 @@ export default function TracksIndex() {
             <Text style={styles.emptyText}>Tap “Buy Track” to create your first track.</Text>
           </View>
         }
+        ListFooterComponent={
+          <Pressable
+            onPress={onOpenPrestige}
+            style={({ pressed }) => [styles.prestigeBtn, pressed && styles.prestigeBtnPressed]}
+          >
+            <View style={styles.prestigeInner}>
+              <View style={styles.prestigeLeft}>
+                <Text style={styles.prestigeTitle}>Prestige</Text>
+                <Text style={styles.prestigeSubtitle}>
+                  Total Knowledge: {totalKnowledge} • Earnings: {earningsMultiplier}x
+                </Text>
+              </View>
+              <View style={styles.prestigeRight}>
+                <Text style={styles.prestigeKnowledge}>+{knowledgeToGain}</Text>
+                <Ionicons name="trophy" size={20} color="#9B7EFF" />
+              </View>
+            </View>
+          </Pressable>
+        }
       />
+
+      <Modal
+        visible={prestigeOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={onCancelPrestige}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={onCancelPrestige}>
+          <Pressable style={styles.modalCardWhite} onPress={() => {}}>
+            <Text style={styles.modalTitleDark}>Prestige</Text>
+
+            <View style={styles.knowledgeBox}>
+              <Text style={styles.knowledgeLabel}>Knowledge to be gained:</Text>
+              <Text style={styles.knowledgeValue}>{knowledgeToGain}</Text>
+            </View>
+
+            <Text style={styles.prestigeWarning}>
+              This will reset all progress (except track maps)
+            </Text>
+            <Text style={styles.prestigeInfo}>For every 100 knowledge, earnings will double.</Text>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={onCancelPrestige}
+                style={({ pressed }) => [
+                  styles.btn,
+                  styles.btnGhostDark,
+                  pressed && styles.btnPressed,
+                ]}
+              >
+                <Text style={styles.btnGhostTextDark}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={onConfirmPrestige}
+                style={({ pressed }) => [
+                  styles.btn,
+                  styles.btnPrestige,
+                  pressed && styles.btnPressed,
+                ]}
+              >
+                <Text style={styles.btnPrestigeText}>Prestige</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={buyOpen} transparent animationType="fade" onRequestClose={onCancelBuy}>
         <Pressable style={styles.modalBackdrop} onPress={onCancelBuy}>
@@ -400,4 +486,123 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   btnPrimaryText: { color: '#0B0F14', fontWeight: '900' },
+
+  prestigeBtn: {
+    marginTop: 12,
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: '#2e2e2e',
+    borderWidth: 1,
+    borderColor: 'rgba(155, 126, 255, 0.3)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#9B7EFF',
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  prestigeBtnPressed: {
+    transform: [{ scale: 0.99 }],
+    opacity: 0.95,
+  },
+  prestigeInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  prestigeLeft: {
+    flex: 1,
+  },
+  prestigeTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#9B7EFF',
+  },
+  prestigeSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.60)',
+  },
+  prestigeRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(155, 126, 255, 0.15)',
+  },
+  prestigeKnowledge: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#9B7EFF',
+  },
+
+  modalCardWhite: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  modalTitleDark: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0B0F14',
+  },
+  knowledgeBox: {
+    marginTop: 20,
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 14,
+    backgroundColor: 'rgba(155, 126, 255, 0.08)',
+    borderWidth: 2,
+    borderColor: 'rgba(155, 126, 255, 0.2)',
+    alignItems: 'center',
+  },
+  knowledgeLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(11,15,20,0.60)',
+    marginBottom: 8,
+  },
+  knowledgeValue: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#9B7EFF',
+  },
+  prestigeWarning: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255,80,80,0.85)',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  prestigeInfo: {
+    fontSize: 13,
+    color: 'rgba(11,15,20,0.65)',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+
+  btnGhostDark: {
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.16)',
+    backgroundColor: 'transparent',
+  },
+  btnGhostTextDark: {
+    color: 'rgba(11,15,20,0.75)',
+    fontWeight: '800',
+  },
+
+  btnPrestige: {
+    backgroundColor: '#9B7EFF',
+  },
+  btnPrestigeText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
 })
