@@ -3,7 +3,7 @@ import { useTracks } from '@/src/state/useTracks'
 import { usePrestige } from '@/src/state/usePrestige'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   FlatList,
   Pressable,
@@ -15,6 +15,7 @@ import {
   TextInput,
 } from 'react-native'
 import { formatMoney } from '@/src/components/money/MoneyHeader'
+import { useEvents } from '@/src/state/useEvents'
 
 function formatRating(r: number) {
   return r.toFixed(1)
@@ -49,6 +50,15 @@ export default function TracksIndex() {
   const [prestigeOpen, setPrestigeOpen] = useState(false)
   const [trackName, setTrackName] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const startTicker = useEvents((s: any) => s.startTicker)
+  const tickOnce = useEvents((s: any) => s.tickOnce)
+
+  // Trigger event tick on mount to calculate offline progress
+  useEffect(() => {
+    startTicker()
+    tickOnce(Date.now())
+  }, [startTicker, tickOnce])
 
   const avg = useMemo(() => {
     if (tracks.length === 0) return 0

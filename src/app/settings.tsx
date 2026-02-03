@@ -269,6 +269,18 @@ export default function SettingsScreen() {
               Track upgrades are only applied once the current event has finished.
             </Text>
           </View>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>Better events are available for higher rated tracks.</Text>
+          </View>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>
+              Use a range of events to keep your tracks active, while other events are in cooldown.
+            </Text>
+          </View>
         </View>
 
         <View style={styles.cardDanger}>

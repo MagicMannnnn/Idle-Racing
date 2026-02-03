@@ -4,8 +4,52 @@ import { useMoney } from '@/src/state/useMoney'
 import { useTracks } from '@/src/state/useTracks'
 import { usePrestige } from '@/src/state/usePrestige'
 
+export type EventType =
+  | 'open_track_day'
+  | 'closed_testing'
+  | 'club_race_day'
+  | 'club_race_weekend'
+  | 'national_race_day'
+  | 'national_race_weekend'
+  | 'endurance_race_weekend'
+
+export type CooldownGroup = 'track_day' | 'club' | 'national' | 'endurance'
+
+// Map event types to cooldown groups
+function getCooldownGroup(eventType: EventType): CooldownGroup {
+  switch (eventType) {
+    case 'open_track_day':
+    case 'closed_testing':
+      return 'track_day'
+    case 'club_race_day':
+    case 'club_race_weekend':
+      return 'club'
+    case 'national_race_day':
+    case 'national_race_weekend':
+      return 'national'
+    case 'endurance_race_weekend':
+      return 'endurance'
+  }
+}
+
+// Get available events based on track rating (rounded to 1dp)
+export function getAvailableEvents(rating: number): EventType[] {
+  const rounded = Math.round(rating * 10) / 10
+  const available: EventType[] = ['open_track_day', 'closed_testing']
+
+  if (rounded >= 2.5) available.push('club_race_day')
+  if (rounded >= 3.0) available.push('club_race_weekend')
+  if (rounded >= 3.5) available.push('national_race_day')
+  if (rounded >= 4.0) available.push('national_race_weekend')
+  if (rounded >= 4.5) available.push('endurance_race_weekend')
+
+  return available
+}
+
 export type TrackDayEvent = {
   trackId: string
+  eventType: EventType
+  earningsMultiplier: number
   startedAt: number
   endsAt: number
   lastTickAt: number
@@ -23,15 +67,17 @@ export type TrackDayEvent = {
 
 type EventsState = {
   activeByTrack: Record<string, TrackDayEvent | undefined>
-  cooldownUntilByTrack: Record<string, number | undefined>
+  cooldownUntilByTrack: Record<string, Partial<Record<CooldownGroup, number>> | undefined>
 
-  isTrackLocked: (trackId: string, now?: number) => boolean
+  isTrackLocked: (trackId: string, eventType: EventType, now?: number) => boolean
   getActive: (trackId: string) => TrackDayEvent | undefined
-  getCooldownRemainingMs: (trackId: string, now?: number) => number
+  getCooldownRemainingMs: (trackId: string, eventType: EventType, now?: number) => number
 
   startTrackDay: (
     trackId: string,
     runtimeMs: number,
+    eventType: EventType,
+    earningsMultiplier: number,
   ) => { ok: true } | { ok: false; reason: 'already_running' | 'in_cooldown' | 'track_not_found' }
   stopTrackDay: (trackId: string) => { ok: true } | { ok: false; reason: 'not_running' }
 
@@ -66,7 +112,7 @@ function nextSeed(seed: number) {
 }
 
 function getTrack(trackId: string) {
-  const t = useTracks.getState().tracks.find((x) => x.id === trackId)
+  const t = useTracks.getState().tracks.find((x: any) => x.id === trackId)
   if (!t) return null
   return {
     capacity: t.capacity,
@@ -75,13 +121,35 @@ function getTrack(trackId: string) {
   }
 }
 
-function cooldownForRuntime(runtimeMs: number) {
-  // 30 seconds -> 3 seconds cooldown
-  if (runtimeMs <= 30_000) return 3_000
-  // 1 minute -> 6 seconds cooldown
-  if (runtimeMs <= 60_000) return 6_000
-  // Default: 20% of runtime, min 10s, max 1 hour
-  return clamp(Math.round(runtimeMs * 0.2), 10_000, 60 * 60 * 1000)
+function cooldownForEventType(eventType: EventType, runtimeMs: number) {
+  switch (eventType) {
+    case 'open_track_day':
+      // Original logic with minimum 10s cooldown
+      if (runtimeMs <= 30_000) return 10_000 // 30 sec -> 10 sec cooldown
+      if (runtimeMs <= 60_000) return 15_000 // 1 min -> 15 sec cooldown
+      return clamp(Math.round(runtimeMs * 0.05), 10_000, 60 * 60 * 1000)
+
+    case 'closed_testing':
+      // Double the open track day cooldown
+      if (runtimeMs <= 30_000) return 20_000 // 30 sec -> 20 sec cooldown
+      if (runtimeMs <= 60_000) return 30_000 // 1 min -> 30 sec cooldown
+      return clamp(Math.round(runtimeMs * 0.1), 20_000, 2 * 60 * 60 * 1000)
+
+    case 'club_race_day':
+    case 'club_race_weekend':
+      // Cooldown is 1/8th of runtime
+      return Math.max(3_000, Math.round(runtimeMs * 0.125))
+
+    case 'national_race_day':
+    case 'national_race_weekend':
+      return runtimeMs
+    case 'endurance_race_weekend':
+      // Cooldown equals runtime
+      return runtimeMs * 2
+
+    default:
+      return clamp(Math.round(runtimeMs * 0.15), 10_000, 60 * 60 * 1000)
+  }
 }
 
 function peopleCounts(capacity: number, trackSize: number, rng: () => number) {
@@ -124,6 +192,7 @@ function simulate(event: TrackDayEvent, now: number) {
 
   const mult = event.incomeX2 ? 2 : 1
   const prestigeMult = usePrestige.getState().calculateEarningsMultiplier()
+  const eventMult = event.earningsMultiplier || 1
 
   // Use snapshotted values from when event started
   for (let i = 0; i < seconds; i++) {
@@ -134,7 +203,7 @@ function simulate(event: TrackDayEvent, now: number) {
       seed,
     )
     seed = r.nextSeed
-    carry += r.perSec * mult * prestigeMult
+    carry += r.perSec * mult * prestigeMult * eventMult
   }
 
   const creditable = Math.floor(carry)
@@ -163,7 +232,7 @@ let useEvents: any
 if (Platform.OS === 'web') {
   let state = {
     activeByTrack: {} as Record<string, TrackDayEvent | undefined>,
-    cooldownUntilByTrack: {} as Record<string, number | undefined>,
+    cooldownUntilByTrack: {} as Record<string, Partial<Record<CooldownGroup, number>> | undefined>,
   }
   const listeners = new Set<() => void>()
 
@@ -208,23 +277,34 @@ if (Platform.OS === 'web') {
     activeByTrack: state.activeByTrack,
     cooldownUntilByTrack: state.cooldownUntilByTrack,
 
-    isTrackLocked: (trackId: string, now = Date.now()) => {
+    isTrackLocked: (trackId: string, eventType: EventType, now = Date.now()) => {
       const running = !!state.activeByTrack[trackId]
-      const until = state.cooldownUntilByTrack[trackId] ?? 0
+      const cooldownGroup = getCooldownGroup(eventType)
+      const groupCooldowns = state.cooldownUntilByTrack[trackId]
+      if (!groupCooldowns) return running
+      const until = groupCooldowns[cooldownGroup] ?? 0
       return running || until > now
     },
 
     getActive: (trackId: string) => state.activeByTrack[trackId],
 
-    getCooldownRemainingMs: (trackId: string, now = Date.now()) => {
-      const until = state.cooldownUntilByTrack[trackId] ?? 0
+    getCooldownRemainingMs: (trackId: string, eventType: EventType, now = Date.now()) => {
+      const cooldownGroup = getCooldownGroup(eventType)
+      const groupCooldowns = state.cooldownUntilByTrack[trackId]
+      if (!groupCooldowns) return 0
+      const until = groupCooldowns[cooldownGroup] ?? 0
       return Math.max(0, until - now)
     },
 
-    startTrackDay: (trackId: string, runtimeMs: number) => {
+    startTrackDay: (
+      trackId: string,
+      runtimeMs: number,
+      eventType: EventType,
+      earningsMultiplier: number,
+    ) => {
       if (state.activeByTrack[trackId])
         return { ok: false as const, reason: 'already_running' as const }
-      if (actions.isTrackLocked(trackId))
+      if (actions.isTrackLocked(trackId, eventType))
         return { ok: false as const, reason: 'in_cooldown' as const }
 
       const t = getTrack(trackId)
@@ -233,6 +313,8 @@ if (Platform.OS === 'web') {
       const now = Date.now()
       const e: TrackDayEvent = {
         trackId,
+        eventType,
+        earningsMultiplier,
         startedAt: now,
         endsAt: now + runtimeMs,
         lastTickAt: now,
@@ -261,11 +343,17 @@ if (Platform.OS === 'web') {
       const now = Date.now()
       const res = simulate(e, now)
 
-      const cdMs = cooldownForRuntime(e.runtimeMs)
+      const cdMs = cooldownForEventType(e.eventType, e.runtimeMs)
+      const cooldownGroup = getCooldownGroup(e.eventType)
       const nextActive = { ...state.activeByTrack }
       delete nextActive[trackId]
       state.activeByTrack = nextActive
-      state.cooldownUntilByTrack = { ...state.cooldownUntilByTrack, [trackId]: now + cdMs }
+
+      const trackCooldowns = state.cooldownUntilByTrack[trackId] || {}
+      state.cooldownUntilByTrack = {
+        ...state.cooldownUntilByTrack,
+        [trackId]: { ...trackCooldowns, [cooldownGroup]: now + cdMs },
+      }
 
       notify()
       void res
@@ -314,7 +402,9 @@ if (Platform.OS === 'web') {
 
       let changed = false
       const nextActive: Record<string, TrackDayEvent | undefined> = { ...active }
-      const nextCooldown: Record<string, number | undefined> = { ...state.cooldownUntilByTrack }
+      const nextCooldown: Record<string, Partial<Record<CooldownGroup, number>> | undefined> = {
+        ...state.cooldownUntilByTrack,
+      }
 
       for (const trackId of ids) {
         const e = active[trackId]
@@ -331,7 +421,12 @@ if (Platform.OS === 'web') {
           res.next.incomeX2 !== e.incomeX2
 
         if (now >= e.endsAt) {
-          nextCooldown[trackId] = now + cooldownForRuntime(e.runtimeMs)
+          const cooldownGroup = getCooldownGroup(e.eventType)
+          const trackCooldowns = nextCooldown[trackId] || {}
+          nextCooldown[trackId] = {
+            ...trackCooldowns,
+            [cooldownGroup]: now + cooldownForEventType(e.eventType, e.runtimeMs),
+          }
           delete nextActive[trackId]
           changed = true
         }
@@ -391,22 +486,34 @@ if (Platform.OS === 'web') {
         activeByTrack: {},
         cooldownUntilByTrack: {},
 
-        isTrackLocked: (trackId: string, now = Date.now()) => {
+        isTrackLocked: (trackId: string, eventType: EventType, now = Date.now()) => {
           const running = !!get().activeByTrack[trackId]
-          const until = get().cooldownUntilByTrack[trackId] ?? 0
+          const cooldownGroup = getCooldownGroup(eventType)
+          const groupCooldowns = get().cooldownUntilByTrack[trackId]
+          if (!groupCooldowns) return running
+          const until = groupCooldowns[cooldownGroup] ?? 0
           return running || until > now
         },
 
         getActive: (trackId: string) => get().activeByTrack[trackId],
 
-        getCooldownRemainingMs: (trackId: string, now = Date.now()) => {
-          const until = get().cooldownUntilByTrack[trackId] ?? 0
+        getCooldownRemainingMs: (trackId: string, eventType: EventType, now = Date.now()) => {
+          const cooldownGroup = getCooldownGroup(eventType)
+          const groupCooldowns = get().cooldownUntilByTrack[trackId]
+          if (!groupCooldowns) return 0
+          const until = groupCooldowns[cooldownGroup] ?? 0
           return Math.max(0, until - now)
         },
 
-        startTrackDay: (trackId: string, runtimeMs: number) => {
+        startTrackDay: (
+          trackId: string,
+          runtimeMs: number,
+          eventType: EventType,
+          earningsMultiplier: number,
+        ) => {
           if (get().activeByTrack[trackId]) return { ok: false as const, reason: 'already_running' }
-          if (get().isTrackLocked(trackId)) return { ok: false as const, reason: 'in_cooldown' }
+          if (get().isTrackLocked(trackId, eventType))
+            return { ok: false as const, reason: 'in_cooldown' }
 
           const t = getTrack(trackId)
           if (!t) return { ok: false as const, reason: 'track_not_found' }
@@ -414,6 +521,8 @@ if (Platform.OS === 'web') {
           const now = Date.now()
           const e: TrackDayEvent = {
             trackId,
+            eventType,
+            earningsMultiplier,
             startedAt: now,
             endsAt: now + runtimeMs,
             lastTickAt: now,
@@ -441,13 +550,18 @@ if (Platform.OS === 'web') {
           const now = Date.now()
           const res = simulate(e, now)
 
-          const cdMs = cooldownForRuntime(e.runtimeMs)
+          const cdMs = cooldownForEventType(e.eventType, e.runtimeMs)
+          const cooldownGroup = getCooldownGroup(e.eventType)
           set((s: any) => {
             const nextActive = { ...s.activeByTrack }
             delete nextActive[trackId]
+            const trackCooldowns = s.cooldownUntilByTrack[trackId] || {}
             return {
               activeByTrack: nextActive,
-              cooldownUntilByTrack: { ...s.cooldownUntilByTrack, [trackId]: now + cdMs },
+              cooldownUntilByTrack: {
+                ...s.cooldownUntilByTrack,
+                [trackId]: { ...trackCooldowns, [cooldownGroup]: now + cdMs },
+              },
             }
           })
 
@@ -499,7 +613,9 @@ if (Platform.OS === 'web') {
 
           let changed = false
           const nextActive: Record<string, TrackDayEvent | undefined> = { ...active }
-          const nextCooldown: Record<string, number | undefined> = { ...state.cooldownUntilByTrack }
+          const nextCooldown: Record<string, Partial<Record<CooldownGroup, number>> | undefined> = {
+            ...state.cooldownUntilByTrack,
+          }
 
           for (const trackId of ids) {
             const e = active[trackId]
@@ -516,7 +632,12 @@ if (Platform.OS === 'web') {
               res.next.incomeX2 !== e.incomeX2
 
             if (now >= e.endsAt) {
-              nextCooldown[trackId] = now + cooldownForRuntime(e.runtimeMs)
+              const cooldownGroup = getCooldownGroup(e.eventType)
+              const trackCooldowns = nextCooldown[trackId] || {}
+              nextCooldown[trackId] = {
+                ...trackCooldowns,
+                [cooldownGroup]: now + cooldownForEventType(e.eventType, e.runtimeMs),
+              }
               delete nextActive[trackId]
               changed = true
             }

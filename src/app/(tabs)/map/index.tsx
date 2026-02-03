@@ -2,9 +2,10 @@ import { useMoney } from '@/src/state/useMoney'
 import { useOnboarding } from '@/src/state/useOnboarding'
 import { useTrackMaps } from '@/src/state/useTrackMaps'
 import { useTracks } from '@/src/state/useTracks'
+import { useEvents } from '@/src/state/useEvents'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import {
   FlatList,
   Pressable,
