@@ -5,6 +5,30 @@ import { useMoney } from '../state/useMoney'
 import { useTracks } from '../state/useTracks'
 import { router } from 'expo-router'
 
+// Time simulation for development/testing
+if (__DEV__) {
+  ;(global as any).simulateTime = (hoursAhead: number) => {
+    const MS_PER_HOUR = 60 * 60 * 1000
+    const originalDateNow = Date.now
+    const timeOffset = hoursAhead * MS_PER_HOUR
+
+    Date.now = function () {
+      return originalDateNow() + timeOffset
+    }
+
+    // Trigger tick to apply changes
+    const { useEvents } = require('../state/useEvents')
+    useEvents.getState().tickOnce()
+
+    console.log(`⏰ Simulated ${hoursAhead} hours ahead`)
+
+    return () => {
+      Date.now = originalDateNow
+      console.log('⏰ Time simulation restored')
+    }
+  }
+}
+
 export default function RootLayout() {
   const hasHydrated = useOnboarding((s: any) => s.hasHydrated)
   if (!hasHydrated) {

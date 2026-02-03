@@ -24,11 +24,34 @@ function calculateKnowledgeFromTracks(): number {
     totalLevels += track.capacityLevel + track.safetyLevel + track.entertainmentLevel
   }
 
-  // Formula: 0 knowledge until 500 levels, then exponential growth
-  // Roughly: 600→3, 900→15, 1200→29, 1500→40, 1800→57, 3000→106
+  //printKnowledgeTable()
+
   if (totalLevels < 500) return 0
-  const excess = totalLevels - 500
-  return Math.floor(Math.pow(excess, 1.3) / 40)
+  const a = 0.00336
+  const b = 0.023
+  const c = 1.05
+  const d = 8000
+  return Math.floor(a * Math.pow(c, b * (totalLevels + d)))
+}
+
+// Test function to see knowledge at different level counts
+function testKnowledgeFormula(totalLevels: number): number {
+  if (totalLevels < 500) return 0
+  const a = 0.00336
+  const b = 0.023
+  const c = 1.05
+  const d = 8000
+  return Math.floor(a * Math.pow(c, b * (totalLevels + d)))
+}
+
+// Call this in console to see the table: usePrestige.getState().testKnowledgeTable()
+export function printKnowledgeTable() {
+  console.log('Total Levels | Knowledge Points')
+  console.log('-------------|------------------')
+  for (let levels = 300; levels <= 6000; levels += 300) {
+    const knowledge = testKnowledgeFormula(levels)
+    console.log(`${levels.toString().padStart(12)} | ${knowledge}`)
+  }
 }
 
 const STORAGE_KEY = 'idle.prestige.v1'
@@ -79,9 +102,9 @@ if (Platform.OS === 'web') {
     },
 
     calculateEarningsMultiplier: () => {
-      // For every 100 knowledge, earnings double
-      // 0-99: 1x, 100-199: 2x, 200-299: 4x, etc.
-      return Math.floor(Math.pow(2, state.totalKnowledge / 100) * 100) / 100
+      // Linear progression: 1x + (totalKnowledge / 100) * 2
+      // Each knowledge point adds 0.02x to the multiplier
+      return parseFloat((1 + (state.totalKnowledge / 100) * 2).toFixed(2))
     },
 
     prestige: () => {
@@ -155,9 +178,9 @@ if (Platform.OS === 'web') {
 
         calculateEarningsMultiplier: () => {
           const totalKnowledge = get().totalKnowledge
-          // For every 100 knowledge, earnings double
-          // 0-99: 1x, 100-199: 2x, 200-299: 4x, etc.
-          return Math.floor(Math.pow(2, totalKnowledge / 100) * 100) / 100
+          // Linear progression: 1x + (totalKnowledge / 100) * 2
+          // Each knowledge point adds 0.02x to the multiplier
+          return parseFloat((1 + (totalKnowledge / 100) * 2).toFixed(2))
         },
 
         prestige: () => {
