@@ -11,7 +11,10 @@ export default function MapTrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const track = useTracks((s) => s.tracks.find((t) => t.id === id))
 
-  const size = Dimensions.get('window').width - 32
+  const size =
+    Dimensions.get('window').width > Dimensions.get('window').height
+      ? Dimensions.get('window').width / 2 - 32
+      : Dimensions.get('window').width - 32
 
   const [isEditing, setIsEditing] = useState(false)
 
