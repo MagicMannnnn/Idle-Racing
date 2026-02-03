@@ -1,6 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { Platform } from 'react-native'
+import { useReducer, useEffect } from 'react'
 
 type MoneyState = {
   money: number
@@ -15,45 +14,146 @@ type MoneyState = {
 const clamp0 = (n: number) => (n < 0 ? 0 : n)
 const valid = (n: number) => Number.isFinite(n) && n >= 0
 
-export const useMoney = create<MoneyState>()(
-  persist(
-    (set, get) => ({
-      money: 0,
+const STORAGE_KEY = 'idle.money.v1'
 
-      add: (amount) => {
-        if (!Number.isFinite(amount)) return
-        set((s) => ({ money: clamp0(s.money + amount) }))
-      },
+let useMoney: any
 
-      remove: (amount) => {
-        if (!Number.isFinite(amount)) return
-        set((s) => ({ money: clamp0(s.money - amount) }))
-      },
+// Web implementation using localStorage
+if (Platform.OS === 'web') {
+  let state = { money: 0 }
+  const listeners = new Set<() => void>()
 
-      spend: (amount) => {
-        if (!valid(amount)) return false
-        const cur = get().money
-        if (cur < amount) return false
-        set({ money: cur - amount })
-        return true
-      },
+  const loadFromStorage = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        state.money = parsed.state?.money ?? 0
+      }
+    } catch (e) {
+      console.error('Failed to load money state', e)
+    }
+  }
 
-      canAfford: (amount) => {
-        if (!valid(amount)) return false
-        return get().money >= amount
-      },
+  const saveToStorage = () => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ state: { money: state.money }, version: 1 }),
+      )
+    } catch (e) {
+      console.error('Failed to save money state', e)
+    }
+  }
 
-      set: (amount) => {
-        if (!Number.isFinite(amount)) return
-        set({ money: clamp0(amount) })
-      },
+  const notify = () => {
+    saveToStorage()
+    listeners.forEach((fn) => fn())
+  }
 
-      reset: () => set({ money: 0 }),
-    }),
-    {
-      name: 'idle.money.v1',
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 1,
+  loadFromStorage()
+
+  const actions: MoneyState = {
+    money: state.money,
+    add: (amount) => {
+      if (!Number.isFinite(amount)) return
+      state.money = clamp0(state.money + amount)
+      notify()
     },
-  ),
-)
+    remove: (amount) => {
+      if (!Number.isFinite(amount)) return
+      state.money = clamp0(state.money - amount)
+      notify()
+    },
+    spend: (amount) => {
+      if (!valid(amount)) return false
+      if (state.money < amount) return false
+      state.money -= amount
+      notify()
+      return true
+    },
+    canAfford: (amount) => {
+      if (!valid(amount)) return false
+      return state.money >= amount
+    },
+    set: (amount) => {
+      if (!Number.isFinite(amount)) return
+      state.money = clamp0(amount)
+      notify()
+    },
+    reset: () => {
+      state.money = 0
+      notify()
+    },
+  }
+
+  const useMoneyWeb: any = (selector?: (state: MoneyState) => any) => {
+    const [, forceUpdate] = useReducer((x: number) => x + 1, 0)
+    useEffect(() => {
+      listeners.add(forceUpdate)
+      return () => {
+        listeners.delete(forceUpdate)
+      }
+    }, [])
+    const fullState = { ...actions, money: state.money }
+    return selector ? selector(fullState) : fullState
+  }
+
+  useMoneyWeb.getState = () => ({ ...actions, money: state.money })
+  useMoneyWeb.setState = (partial: Partial<{ money: number }>) => {
+    if ('money' in partial) state.money = partial.money!
+    notify()
+  }
+
+  useMoney = useMoneyWeb
+} else {
+  // Native implementation using zustand
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default
+  const { create } = require('zustand') as any
+  const { persist, createJSONStorage } = require('zustand/middleware') as any
+
+  useMoney = create()(
+    persist(
+      (set: any, get: any) => ({
+        money: 0,
+
+        add: (amount: number) => {
+          if (!Number.isFinite(amount)) return
+          set((s: any) => ({ money: clamp0(s.money + amount) }))
+        },
+
+        remove: (amount: number) => {
+          if (!Number.isFinite(amount)) return
+          set((s: any) => ({ money: clamp0(s.money - amount) }))
+        },
+
+        spend: (amount: number) => {
+          if (!valid(amount)) return false
+          const cur = get().money
+          if (cur < amount) return false
+          set({ money: cur - amount })
+          return true
+        },
+
+        canAfford: (amount: number) => {
+          if (!valid(amount)) return false
+          return get().money >= amount
+        },
+
+        set: (amount: number) => {
+          if (!Number.isFinite(amount)) return
+          set({ money: clamp0(amount) })
+        },
+
+        reset: () => set({ money: 0 }),
+      }),
+      {
+        name: STORAGE_KEY,
+        storage: createJSONStorage(() => AsyncStorage),
+        version: 1,
+      },
+    ),
+  )
+}
+
+export { useMoney }

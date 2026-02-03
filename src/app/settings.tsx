@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
-import { View, Text, Pressable, Alert, StyleSheet, ScrollView } from 'react-native'
+import { View, Text, Pressable, Alert, StyleSheet, ScrollView, Platform } from 'react-native'
 import Slider from '@react-native-community/slider'
-import { router } from 'expo-router'
+import { router, useNavigation } from 'expo-router'
 import { useOnboarding } from '../state/useOnboarding'
 import { useMoney } from '../state/useMoney'
 import { useTracks } from '../state/useTracks'
@@ -10,27 +10,36 @@ import { useTrackMaps } from '../state/useTrackMaps'
 import { useSettings } from '../state/useSettings'
 
 const DEFAULT_SPEED_VARIANCE = 12
+const DEFAULT_MAX_CAR_COUNT = 100
 
 export default function SettingsScreen() {
-  const resetOnboarding = useOnboarding((s) => s.reset)
-  const resetMoney = useMoney((s) => s.reset)
-  const resetTracks = useTracks((s) => s.reset)
-  const resetEvents = useEvents((s) => s.reset)
-  const resetMaps = useTrackMaps((s) => s.resetAll)
-  const resetSettings = useSettings((s) => s.reset)
+  const navigation = useNavigation()
 
-  const enlargedLeader = useSettings((s) => s.enlargedLeader)
-  const setEnlargedLeader = useSettings((s) => s.setEnlargedLeader)
+  const resetOnboarding = useOnboarding((s: any) => s.reset)
+  const resetMoney = useMoney((s: any) => s.reset)
+  const resetTracks = useTracks((s: any) => s.reset)
+  const resetEvents = useEvents((s: any) => s.reset)
+  const resetMaps = useTrackMaps((s: any) => s.resetAll)
+  const resetSettings = useSettings((s: any) => s.reset)
 
-  const enableAds = useSettings((s) => s.enableAds)
-  const setEnableAds = useSettings((s) => s.setEnableAds)
+  const enlargedLeader = useSettings((s: any) => s.enlargedLeader)
+  const setEnlargedLeader = useSettings((s: any) => s.setEnlargedLeader)
 
-  const speedVariance = useSettings((s) => s.speedVariance)
-  const setSpeedVariance = useSettings((s) => s.setSpeedVariance)
-  const resetSpeedVariance = useSettings((s) => s.resetSpeedVariance)
+  const enableAds = useSettings((s: any) => s.enableAds)
+  const setEnableAds = useSettings((s: any) => s.setEnableAds)
+
+  const speedVariance = useSettings((s: any) => s.speedVariance)
+  const setSpeedVariance = useSettings((s: any) => s.setSpeedVariance)
+  const resetSpeedVariance = useSettings((s: any) => s.resetSpeedVariance)
+
+  const maxCarCount = useSettings((s: any) => s.maxCarCount)
+  const setMaxCarCount = useSettings((s: any) => s.setMaxCarCount)
+  const resetMaxCarCount = useSettings((s: any) => s.resetMaxCarCount)
 
   const toggleLabel = useMemo(() => (enlargedLeader ? 'On' : 'Off'), [enlargedLeader])
   const adsToggleLabel = useMemo(() => (enableAds ? 'On' : 'Off'), [enableAds])
+
+  const isWeb = Platform.OS === 'web'
 
   function doReset() {
     resetOnboarding()
@@ -54,6 +63,7 @@ export default function SettingsScreen() {
   }
 
   const speedIsDefault = speedVariance === DEFAULT_SPEED_VARIANCE
+  const maxCarIsDefault = maxCarCount === DEFAULT_MAX_CAR_COUNT
 
   return (
     <View style={styles.screen}>
@@ -95,20 +105,32 @@ export default function SettingsScreen() {
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Enable ads</Text>
-              <Text style={styles.rowSubtitle}>Optionally watch ads to earn rewards.</Text>
+              <Text style={styles.rowSubtitle}>
+                {isWeb
+                  ? 'Ads are only supported on the app version.'
+                  : 'Optionally watch ads to earn rewards.'}
+              </Text>
             </View>
 
             <Pressable
-              onPress={() => setEnableAds(!enableAds)}
+              onPress={() => !isWeb && setEnableAds(!enableAds)}
+              disabled={isWeb}
               style={({ pressed }) => [
                 styles.pill,
-                enableAds ? styles.pillOn : styles.pillOff,
-                pressed && styles.pressed,
+                enableAds && !isWeb ? styles.pillOn : styles.pillOff,
+                isWeb && styles.pillDisabled,
+                pressed && !isWeb && styles.pressed,
               ]}
               hitSlop={10}
             >
-              <Text style={[styles.pillText, enableAds ? styles.pillTextOn : styles.pillTextOff]}>
-                {adsToggleLabel}
+              <Text
+                style={[
+                  styles.pillText,
+                  enableAds && !isWeb ? styles.pillTextOn : styles.pillTextOff,
+                  isWeb && styles.pillTextDisabled,
+                ]}
+              >
+                {!isWeb ? adsToggleLabel : 'Off'}
               </Text>
             </Pressable>
           </View>
@@ -163,6 +185,58 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <View style={styles.card}>
+          <View style={styles.rowTop}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Maximum car count</Text>
+              <Text style={styles.rowSubtitle}>
+                Limit car count to help performance or add variation to races.
+              </Text>
+            </View>
+
+            <View style={styles.valuePill}>
+              <Text style={styles.valuePillText}>{Math.round(maxCarCount)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.sliderWrap}>
+            <Slider
+              value={maxCarCount}
+              minimumValue={5}
+              maximumValue={100}
+              step={1}
+              onValueChange={setMaxCarCount}
+              minimumTrackTintColor="rgba(120, 170, 255, 0.95)"
+              maximumTrackTintColor="rgba(255,255,255,0.18)"
+              thumbTintColor="#FFFFFF"
+            />
+
+            <View style={styles.sliderMetaRow}>
+              <Text style={styles.sliderMeta}>5</Text>
+              <Text style={styles.sliderMeta}>100</Text>
+            </View>
+
+            <Pressable
+              onPress={resetMaxCarCount}
+              disabled={maxCarIsDefault}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                maxCarIsDefault && styles.secondaryBtnDisabled,
+                pressed && !maxCarIsDefault && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.secondaryBtnText,
+                  maxCarIsDefault && styles.secondaryBtnTextDisabled,
+                ]}
+              >
+                Reset to default ({DEFAULT_MAX_CAR_COUNT})
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
         <View style={styles.cardTips}>
           <Text style={styles.tipsTitle}>Tips</Text>
 
@@ -186,6 +260,13 @@ export default function SettingsScreen() {
             <Text style={styles.tipText}>
               <Text style={styles.tipStrong}>Safety</Text> can be used to get the highest rating out
               of each track.
+            </Text>
+          </View>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>
+              Track upgrades are only applied once the current event has finished.
             </Text>
           </View>
         </View>
@@ -286,6 +367,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
   },
 
+  pillDisabled: {
+    opacity: 0.4,
+  },
+
   pillText: {
     fontSize: 13,
     fontWeight: '800',
@@ -298,6 +383,10 @@ const styles = StyleSheet.create({
 
   pillTextOff: {
     color: 'rgba(255,255,255,0.75)',
+  },
+
+  pillTextDisabled: {
+    color: 'rgba(255,255,255,0.5)',
   },
 
   valuePill: {

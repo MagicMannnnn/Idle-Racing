@@ -1,6 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
+import { Platform } from 'react-native'
+import { useReducer, useEffect } from 'react'
 
 export type CellType = 'empty' | 'track' | 'infield' | 'stand'
 
@@ -180,103 +179,268 @@ function inBounds(size: number, x: number, y: number) {
   return x >= 0 && y >= 0 && x < size && y < size
 }
 
-export const useTrackMaps = create<TrackMapState>()(
-  persist(
-    (set, get) => ({
-      byTrackId: {},
-      carNames: [],
-      carNumbers: [],
+const STORAGE_KEY = 'idle.trackmaps.v13'
 
-      get: (trackId) => get().byTrackId[trackId],
+let useTrackMaps: any
 
-      ensure: (trackId, size = 5) => {
-        const existing = get().byTrackId[trackId]
-        if (existing) return
-        set((s) => ({
-          byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(size) },
-        }))
-      },
+// Web implementation using localStorage
+if (Platform.OS === 'web') {
+  let state = {
+    byTrackId: {} as Record<string, TrackGrid | undefined>,
+    carNames: [] as string[],
+    carNumbers: [] as number[],
+  }
+  const listeners = new Set<() => void>()
 
-      setSize: (trackId, size) => {
-        let nextSize = size
-        if (nextSize < 3) nextSize = 3
-        if (nextSize % 2 === 0) nextSize += 1
-        set((s) => ({
-          byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(nextSize) },
-        }))
-      },
+  const loadFromStorage = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        Object.assign(state, parsed.state || parsed)
+      }
+    } catch (e) {
+      console.error('Failed to load trackmaps state', e)
+    }
+  }
 
-      setCell: (trackId, x, y, type) => {
-        const grid = get().byTrackId[trackId]
-        if (!grid) return
-        if (!inBounds(grid.size, x, y)) return
+  const saveToStorage = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 1 }))
+    } catch (e) {
+      console.error('Failed to save trackmaps state', e)
+    }
+  }
 
-        const idx = y * grid.size + x
-        const next = grid.cells.slice()
-        if (type === 'stand' && next[idx] !== 'empty') return
+  const notify = () => {
+    saveToStorage()
+    listeners.forEach((fn) => fn())
+  }
 
-        next[idx] = type
+  loadFromStorage()
 
-        set((s) => ({
-          byTrackId: {
-            ...s.byTrackId,
-            [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
-          },
-        }))
-      },
+  const actions: TrackMapState = {
+    byTrackId: state.byTrackId,
+    carNames: state.carNames,
+    carNumbers: state.carNumbers,
 
-      setCells: (trackId, cells) => {
-        const grid = get().byTrackId[trackId]
-        if (!grid) return
-        if (cells.length !== grid.size * grid.size) return
-        const next = cells.slice()
-        for (let i = 0; i < next.length; i++) {
-          if (next[i] === 'stand') next[i] = 'empty'
-        }
-        set((s) => ({
-          byTrackId: {
-            ...s.byTrackId,
-            [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
-          },
-        }))
-      },
+    get: (trackId: string) => state.byTrackId[trackId],
 
-      setCarName: (carIndex: number, name: string, carNumber?: number) => {
-        set((state) => {
-          const carNames = state.carNames ? [...state.carNames] : []
-          const carNumbers = state.carNumbers ? [...state.carNumbers] : []
-          carNames[carIndex] = name
-          if (carNumber !== undefined) {
-            carNumbers[carIndex] = carNumber
-          }
-          return { carNames, carNumbers }
-        })
-      },
-
-      getCarNames: () => {
-        const carNames = get().carNames
-        return carNames ? carNames : []
-      },
-
-      getCarNumbers: () => {
-        const carNumbers = get().carNumbers
-        return carNumbers ? carNumbers : []
-      },
-
-      clear: (trackId: string) => {
-        const grid = get().byTrackId[trackId]
-        if (!grid) return
-        set((s) => ({
-          byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(grid.size) },
-        }))
-      },
-
-      resetAll: () => set({ byTrackId: {} }),
-    }),
-    {
-      name: 'idle.trackmaps.v13',
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 1,
+    ensure: (trackId: string, size = 5) => {
+      const existing = state.byTrackId[trackId]
+      if (existing) return
+      state.byTrackId = { ...state.byTrackId, [trackId]: generateDefaultOval(size) }
+      notify()
     },
-  ),
-)
+
+    setSize: (trackId: string, size: number) => {
+      let nextSize = size
+      if (nextSize < 3) nextSize = 3
+      if (nextSize % 2 === 0) nextSize += 1
+      state.byTrackId = { ...state.byTrackId, [trackId]: generateDefaultOval(nextSize) }
+      notify()
+    },
+
+    setCell: (trackId: string, x: number, y: number, type: CellType) => {
+      const grid = state.byTrackId[trackId]
+      if (!grid) return
+      if (!inBounds(grid.size, x, y)) return
+
+      const idx = y * grid.size + x
+      const next = grid.cells.slice()
+      if (type === 'stand' && next[idx] !== 'empty') return
+
+      next[idx] = type
+
+      state.byTrackId = {
+        ...state.byTrackId,
+        [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
+      }
+      notify()
+    },
+
+    setCells: (trackId: string, cells: CellType[]) => {
+      const grid = state.byTrackId[trackId]
+      if (!grid) return
+      if (cells.length !== grid.size * grid.size) return
+      const next = cells.slice()
+      for (let i = 0; i < next.length; i++) {
+        if (next[i] === 'stand') next[i] = 'empty'
+      }
+      state.byTrackId = {
+        ...state.byTrackId,
+        [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
+      }
+      notify()
+    },
+
+    setCarName: (carIndex: number, name: string, carNumber?: number) => {
+      const carNames = state.carNames ? [...state.carNames] : []
+      const carNumbers = state.carNumbers ? [...state.carNumbers] : []
+      carNames[carIndex] = name
+      if (carNumber !== undefined) {
+        carNumbers[carIndex] = carNumber
+      }
+      state.carNames = carNames
+      state.carNumbers = carNumbers
+      notify()
+    },
+
+    getCarNames: () => {
+      return state.carNames ? state.carNames : []
+    },
+
+    getCarNumbers: () => {
+      return state.carNumbers ? state.carNumbers : []
+    },
+
+    clear: (trackId: string) => {
+      const grid = state.byTrackId[trackId]
+      if (!grid) return
+      state.byTrackId = { ...state.byTrackId, [trackId]: generateDefaultOval(grid.size) }
+      notify()
+    },
+
+    resetAll: () => {
+      state.byTrackId = {}
+      notify()
+    },
+  }
+
+  const useTrackMapsWeb: any = (selector?: (state: TrackMapState) => any) => {
+    const [, forceUpdate] = useReducer((x: number) => x + 1, 0)
+    useEffect(() => {
+      listeners.add(forceUpdate)
+      return () => {
+        listeners.delete(forceUpdate)
+      }
+    }, [])
+    const fullState = {
+      ...actions,
+      byTrackId: state.byTrackId,
+      carNames: state.carNames,
+      carNumbers: state.carNumbers,
+    }
+    return selector ? selector(fullState) : fullState
+  }
+
+  useTrackMapsWeb.getState = () => ({
+    ...actions,
+    byTrackId: state.byTrackId,
+    carNames: state.carNames,
+    carNumbers: state.carNumbers,
+  })
+  useTrackMapsWeb.setState = (partial: Partial<typeof state>) => {
+    Object.assign(state, partial)
+    notify()
+  }
+
+  useTrackMaps = useTrackMapsWeb
+} else {
+  // Native implementation using zustand
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default
+  const { create } = require('zustand') as any
+  const { createJSONStorage, persist } = require('zustand/middleware') as any
+
+  useTrackMaps = create()(
+    persist(
+      (set: any, get: any) => ({
+        byTrackId: {},
+        carNames: [],
+        carNumbers: [],
+
+        get: (trackId: string) => get().byTrackId[trackId],
+
+        ensure: (trackId: string, size = 5) => {
+          const existing = get().byTrackId[trackId]
+          if (existing) return
+          set((s: any) => ({
+            byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(size) },
+          }))
+        },
+
+        setSize: (trackId: string, size: number) => {
+          let nextSize = size
+          if (nextSize < 3) nextSize = 3
+          set((s: any) => ({
+            byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(nextSize) },
+          }))
+        },
+
+        setCell: (trackId: string, x: number, y: number, type: CellType) => {
+          const grid = get().byTrackId[trackId]
+          if (!grid) return
+          if (!inBounds(grid.size, x, y)) return
+
+          const idx = y * grid.size + x
+          const next = grid.cells.slice()
+          if (type === 'stand' && next[idx] !== 'empty') return
+
+          next[idx] = type
+
+          set((s: any) => ({
+            byTrackId: {
+              ...s.byTrackId,
+              [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
+            },
+          }))
+        },
+
+        setCells: (trackId: string, cells: CellType[]) => {
+          const grid = get().byTrackId[trackId]
+          if (!grid) return
+          if (cells.length !== grid.size * grid.size) return
+          const next = cells.slice()
+          for (let i = 0; i < next.length; i++) {
+            if (next[i] === 'stand') next[i] = 'empty'
+          }
+          set((s: any) => ({
+            byTrackId: {
+              ...s.byTrackId,
+              [trackId]: { ...grid, cells: next, updatedAt: Date.now() },
+            },
+          }))
+        },
+
+        setCarName: (carIndex: number, name: string, carNumber?: number) => {
+          set((state: any) => {
+            const carNames = state.carNames ? [...state.carNames] : []
+            const carNumbers = state.carNumbers ? [...state.carNumbers] : []
+            carNames[carIndex] = name
+            if (carNumber !== undefined) {
+              carNumbers[carIndex] = carNumber
+            }
+            return { carNames, carNumbers }
+          })
+        },
+
+        getCarNames: () => {
+          const carNames = get().carNames
+          return carNames ? carNames : []
+        },
+
+        getCarNumbers: () => {
+          const carNumbers = get().carNumbers
+          return carNumbers ? carNumbers : []
+        },
+
+        clear: (trackId: string) => {
+          const grid = get().byTrackId[trackId]
+          if (!grid) return
+          set((s: any) => ({
+            byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(grid.size) },
+          }))
+        },
+
+        resetAll: () => set({ byTrackId: {} }),
+      }),
+      {
+        name: STORAGE_KEY,
+        storage: createJSONStorage(() => AsyncStorage),
+        version: 1,
+      },
+    ),
+  )
+}
+
+export { useTrackMaps }

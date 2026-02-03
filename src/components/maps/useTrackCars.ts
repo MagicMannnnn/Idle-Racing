@@ -224,8 +224,9 @@ export function useTrackCars({
   carHPx,
 }: UseTrackCarsOpts) {
   const len = loop.length
-  const safeCarCount = Math.min(carCount, len)
-  const variance = useSettings((s) => s.speedVariance) / 100
+  const maxCarCount = useSettings((s: any) => s.maxCarCount)
+  const safeCarCount = Math.min(carCount, len, maxCarCount)
+  const variance = useSettings((s: any) => s.speedVariance) / 100
 
   const TUNE = useMemo(() => {
     return {

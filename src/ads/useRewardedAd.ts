@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AdEventType,
-  RewardedAd,
-  RewardedAdEventType,
-  TestIds,
-  type RewardedAdReward,
-} from 'react-native-google-mobile-ads'
+import { Platform } from 'react-native'
+
+// Only import on native platforms
+let RewardedAd: any
+let RewardedAdEventType: any
+let AdEventType: any
+let TestIds: any
+
+if (Platform.OS !== 'web') {
+  const ads = require('react-native-google-mobile-ads')
+  RewardedAd = ads.RewardedAd
+  RewardedAdEventType = ads.RewardedAdEventType
+  AdEventType = ads.AdEventType
+  TestIds = ads.TestIds
+}
+
+type RewardedAdReward = {
+  type: string
+  amount: number
+}
 
 type UseRewardedAdOpts = {
   adUnitId?: string
@@ -19,14 +32,23 @@ export function useRewardedAd(opts: UseRewardedAdOpts = {}) {
   // holds the reward callback for the current ad show
   const onEarnedRef = useRef<((reward: RewardedAdReward) => void) | null>(null)
 
+  // On web, ads are disabled
+  const isWeb = Platform.OS === 'web'
+
   const adUnitId = useMemo(() => {
+    if (isWeb) return ''
     if (opts.useTestIds) return TestIds.REWARDED
     return opts.adUnitId ?? TestIds.REWARDED
-  }, [opts.adUnitId, opts.useTestIds])
+  }, [opts.adUnitId, opts.useTestIds, isWeb])
 
-  const rewarded = useMemo(() => RewardedAd.createForAdRequest(adUnitId), [adUnitId])
+  const rewarded = useMemo(() => {
+    if (isWeb) return null
+    return RewardedAd.createForAdRequest(adUnitId)
+  }, [adUnitId, isWeb])
 
   useEffect(() => {
+    if (isWeb || !rewarded) return
+
     setLoaded(false)
     setShowing(false)
     onEarnedRef.current = null
@@ -47,11 +69,14 @@ export function useRewardedAd(opts: UseRewardedAdOpts = {}) {
       rewarded.load()
     })
 
-    const unsubEarned = rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
-      const cb = onEarnedRef.current
-      onEarnedRef.current = null
-      if (cb) cb(reward)
-    })
+    const unsubEarned = rewarded.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      (reward: RewardedAdReward) => {
+        const cb = onEarnedRef.current
+        onEarnedRef.current = null
+        if (cb) cb(reward)
+      },
+    )
 
     rewarded.load()
 
@@ -62,10 +87,16 @@ export function useRewardedAd(opts: UseRewardedAdOpts = {}) {
       unsubEarned()
       onEarnedRef.current = null
     }
-  }, [rewarded])
+  }, [rewarded, isWeb])
 
   const show = useCallback(
     async (onEarned: (reward: RewardedAdReward) => void) => {
+      if (isWeb || !rewarded) {
+        // On web, simulate immediate reward
+        onEarned({ type: 'web-reward', amount: 1 })
+        return true
+      }
+
       if (!loaded || showing) return false
 
       onEarnedRef.current = onEarned
@@ -80,8 +111,8 @@ export function useRewardedAd(opts: UseRewardedAdOpts = {}) {
         return false
       }
     },
-    [loaded, showing, rewarded],
+    [loaded, showing, rewarded, isWeb],
   )
 
-  return { loaded, showing, show }
+  return { loaded: isWeb ? true : loaded, showing, show }
 }

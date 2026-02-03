@@ -1,6 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { Platform } from 'react-native'
+import { useReducer, useEffect } from 'react'
 import { useMoney } from './useMoney'
 
 const MIN_LEVEL = 1
@@ -328,113 +327,27 @@ function recomputeTrack(t: Track): Track {
   }
 }
 
-export const useTracks = create<TracksState>()(
-  persist(
-    (set, get) => ({
-      tracks: [],
+const STORAGE_KEY = 'idle.tracks.v4'
 
-      nextTrackCost: () => trackCostForIndex(get().tracks.length),
+let useTracks: any
 
-      canBuyNextTrack: () => useMoney.getState().canAfford(get().nextTrackCost()),
+// Web implementation using localStorage
+if (Platform.OS === 'web') {
+  let state = {
+    tracks: [] as Track[],
+  }
+  const listeners = new Set<() => void>()
 
-      buyNextTrack: (name: string) => {
-        const cost = get().nextTrackCost()
-        const ok = useMoney.getState().spend(cost)
-        if (!ok) return { ok: false as const, reason: 'not_enough_money' }
-
-        const index = get().tracks.length
-        const track = makeTrack(index, name)
-
-        set((s) => ({ tracks: [...s.tracks, track] }))
-        return { ok: true as const, track, cost }
-      },
-      quoteCapacityUpgrade: (trackId, mode) => {
-        const t = get().tracks.find((x) => x.id === trackId)
-        if (!t) return { ok: false as const, reason: 'not_found' }
-        return quoteUpgrade(t.index, t.capacityLevel, mode, capacityLevelCost)
-      },
-
-      quoteSafetyUpgrade: (trackId, mode) => {
-        const t = get().tracks.find((x) => x.id === trackId)
-        if (!t) return { ok: false as const, reason: 'not_found' }
-        return quoteUpgrade(t.index, t.safetyLevel, mode, safetyLevelCost)
-      },
-
-      quoteEntertainmentUpgrade: (trackId, mode) => {
-        const t = get().tracks.find((x) => x.id === trackId)
-        if (!t) return { ok: false as const, reason: 'not_found' }
-        return quoteUpgrade(t.index, t.entertainmentLevel, mode, entertainmentLevelCost)
-      },
-      upgradeCapacityByMode: (trackId, mode) => {
-        const cur = get().tracks
-        const i = cur.findIndex((t) => t.id === trackId)
-        if (i === -1) return { ok: false as const, reason: 'not_found' }
-
-        const t = cur[i]
-        const q = quoteUpgrade(t.index, t.capacityLevel, mode, capacityLevelCost)
-        if (!q.ok) return { ok: false as const, reason: 'already_max' }
-
-        const ok = useMoney.getState().spend(q.cost)
-        if (!ok) return { ok: false as const, reason: 'not_enough_money' }
-
-        const updated = [...cur]
-        updated[i] = recomputeTrack({ ...t, capacityLevel: q.toLevel })
-        set({ tracks: updated })
-        return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
-      },
-
-      upgradeSafetyByMode: (trackId, mode) => {
-        const cur = get().tracks
-        const i = cur.findIndex((t) => t.id === trackId)
-        if (i === -1) return { ok: false as const, reason: 'not_found' }
-
-        const t = cur[i]
-        const q = quoteUpgrade(t.index, t.safetyLevel, mode, safetyLevelCost)
-        if (!q.ok) return { ok: false as const, reason: 'already_max' }
-
-        const ok = useMoney.getState().spend(q.cost)
-        if (!ok) return { ok: false as const, reason: 'not_enough_money' }
-
-        const updated = [...cur]
-        updated[i] = recomputeTrack({ ...t, safetyLevel: q.toLevel })
-        set({ tracks: updated })
-        return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
-      },
-
-      upgradeEntertainmentByMode: (trackId, mode) => {
-        const cur = get().tracks
-        const i = cur.findIndex((t) => t.id === trackId)
-        if (i === -1) return { ok: false as const, reason: 'not_found' }
-
-        const t = cur[i]
-        const q = quoteUpgrade(t.index, t.entertainmentLevel, mode, entertainmentLevelCost)
-        if (!q.ok) return { ok: false as const, reason: 'already_max' }
-
-        const ok = useMoney.getState().spend(q.cost)
-        if (!ok) return { ok: false as const, reason: 'not_enough_money' }
-
-        const updated = [...cur]
-        updated[i] = recomputeTrack({ ...t, entertainmentLevel: q.toLevel })
-        set({ tracks: updated })
-        return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
-      },
-      getById: (trackId) => get().tracks.find((t) => t.id === trackId),
-
-      reset: () => set({ tracks: [] }),
-    }),
-    {
-      name: 'idle.tracks.v4',
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 4,
-
-      migrate: (persisted: any) => {
-        const rawTracks = Array.isArray(persisted?.tracks) ? persisted.tracks : []
-        const migrated = rawTracks.map((t: any, idx: number) => {
+  const loadFromStorage = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const rawTracks = Array.isArray(parsed.state?.tracks) ? parsed.state.tracks : []
+        state.tracks = rawTracks.map((t: any, idx: number) => {
           const index = typeof t.index === 'number' ? t.index : idx
           const name = typeof t.name === 'string' ? t.name : `Track ${index + 1}`
-
           const legacyLevel = typeof t.level === 'number' ? t.level : 1
-
           const capacityLevel = typeof t.capacityLevel === 'number' ? t.capacityLevel : legacyLevel
           const safetyLevel = typeof t.safetyLevel === 'number' ? t.safetyLevel : legacyLevel
           const entertainmentLevel =
@@ -444,29 +357,313 @@ export const useTracks = create<TracksState>()(
             id: typeof t.id === 'string' ? t.id : `track_${index + 1}`,
             index,
             name,
-
             rating: 1.0,
             maxRating: 5.0,
-
             capacityLevel,
             capacity: 0,
             maxCapacity: 0,
-
             safetyLevel,
             safety: 0,
             maxSafety: 0,
-
             entertainmentLevel,
             entertainment: 0,
             maxEntertainment: 0,
             trackSize: (index + 1) * 10,
           }
-
           return recomputeTrack(base)
         })
+      }
+    } catch (e) {
+      console.error('Failed to load tracks state', e)
+    }
+  }
 
-        return { ...persisted, tracks: migrated }
-      },
+  const saveToStorage = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 4 }))
+    } catch (e) {
+      console.error('Failed to save tracks state', e)
+    }
+  }
+
+  const notify = () => {
+    saveToStorage()
+    listeners.forEach((fn) => fn())
+  }
+
+  loadFromStorage()
+
+  const actions: TracksState = {
+    tracks: state.tracks,
+
+    nextTrackCost: () => trackCostForIndex(state.tracks.length),
+
+    canBuyNextTrack: () => useMoney.getState().canAfford(trackCostForIndex(state.tracks.length)),
+
+    buyNextTrack: (name: string) => {
+      const cost = trackCostForIndex(state.tracks.length)
+      const ok = useMoney.getState().spend(cost)
+      if (!ok) return { ok: false as const, reason: 'not_enough_money' as const }
+
+      const index = state.tracks.length
+      const track = makeTrack(index, name)
+
+      state.tracks = [...state.tracks, track]
+      notify()
+      return { ok: true as const, track, cost }
     },
-  ),
-)
+
+    quoteCapacityUpgrade: (trackId: string, mode: UpgradeMode) => {
+      const t = state.tracks.find((x) => x.id === trackId)
+      if (!t) return { ok: false as const, reason: 'not_found' as const }
+      return quoteUpgrade(t.index, t.capacityLevel, mode, capacityLevelCost)
+    },
+
+    quoteSafetyUpgrade: (trackId: string, mode: UpgradeMode) => {
+      const t = state.tracks.find((x) => x.id === trackId)
+      if (!t) return { ok: false as const, reason: 'not_found' as const }
+      return quoteUpgrade(t.index, t.safetyLevel, mode, safetyLevelCost)
+    },
+
+    quoteEntertainmentUpgrade: (trackId: string, mode: UpgradeMode) => {
+      const t = state.tracks.find((x) => x.id === trackId)
+      if (!t) return { ok: false as const, reason: 'not_found' as const }
+      return quoteUpgrade(t.index, t.entertainmentLevel, mode, entertainmentLevelCost)
+    },
+
+    upgradeCapacityByMode: (trackId: string, mode: UpgradeMode) => {
+      const cur = state.tracks
+      const i = cur.findIndex((t) => t.id === trackId)
+      if (i === -1) return { ok: false as const, reason: 'not_found' as const }
+
+      const t = cur[i]
+      const q = quoteUpgrade(t.index, t.capacityLevel, mode, capacityLevelCost)
+      if (!q.ok) return { ok: false as const, reason: 'already_max' as const }
+
+      const ok = useMoney.getState().spend(q.cost)
+      if (!ok) return { ok: false as const, reason: 'not_enough_money' as const }
+
+      const updated = [...cur]
+      updated[i] = recomputeTrack({ ...t, capacityLevel: q.toLevel })
+      state.tracks = updated
+      notify()
+      return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
+    },
+
+    upgradeSafetyByMode: (trackId: string, mode: UpgradeMode) => {
+      const cur = state.tracks
+      const i = cur.findIndex((t) => t.id === trackId)
+      if (i === -1) return { ok: false as const, reason: 'not_found' as const }
+
+      const t = cur[i]
+      const q = quoteUpgrade(t.index, t.safetyLevel, mode, safetyLevelCost)
+      if (!q.ok) return { ok: false as const, reason: 'already_max' as const }
+
+      const ok = useMoney.getState().spend(q.cost)
+      if (!ok) return { ok: false as const, reason: 'not_enough_money' as const }
+
+      const updated = [...cur]
+      updated[i] = recomputeTrack({ ...t, safetyLevel: q.toLevel })
+      state.tracks = updated
+      notify()
+      return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
+    },
+
+    upgradeEntertainmentByMode: (trackId: string, mode: UpgradeMode) => {
+      const cur = state.tracks
+      const i = cur.findIndex((t) => t.id === trackId)
+      if (i === -1) return { ok: false as const, reason: 'not_found' as const }
+
+      const t = cur[i]
+      const q = quoteUpgrade(t.index, t.entertainmentLevel, mode, entertainmentLevelCost)
+      if (!q.ok) return { ok: false as const, reason: 'already_max' as const }
+
+      const ok = useMoney.getState().spend(q.cost)
+      if (!ok) return { ok: false as const, reason: 'not_enough_money' as const }
+
+      const updated = [...cur]
+      updated[i] = recomputeTrack({ ...t, entertainmentLevel: q.toLevel })
+      state.tracks = updated
+      notify()
+      return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
+    },
+
+    getById: (trackId: string) => state.tracks.find((t) => t.id === trackId),
+
+    reset: () => {
+      state.tracks = []
+      notify()
+    },
+  }
+
+  const useTracksWeb: any = (selector?: (state: TracksState) => any) => {
+    const [, forceUpdate] = useReducer((x: number) => x + 1, 0)
+    useEffect(() => {
+      listeners.add(forceUpdate)
+      return () => {
+        listeners.delete(forceUpdate)
+      }
+    }, [])
+    const fullState = { ...actions, tracks: state.tracks }
+    return selector ? selector(fullState) : fullState
+  }
+
+  useTracksWeb.getState = () => ({ ...actions, tracks: state.tracks })
+  useTracksWeb.setState = (partial: Partial<typeof state>) => {
+    Object.assign(state, partial)
+    notify()
+  }
+
+  useTracks = useTracksWeb
+} else {
+  // Native implementation using zustand
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default
+  const { create } = require('zustand') as any
+  const { persist, createJSONStorage } = require('zustand/middleware') as any
+
+  useTracks = create()(
+    persist(
+      (set: any, get: any) => ({
+        tracks: [],
+
+        nextTrackCost: () => trackCostForIndex(get().tracks.length),
+
+        canBuyNextTrack: () => useMoney.getState().canAfford(get().nextTrackCost()),
+
+        buyNextTrack: (name: string) => {
+          const cost = get().nextTrackCost()
+          const ok = useMoney.getState().spend(cost)
+          if (!ok) return { ok: false as const, reason: 'not_enough_money' }
+
+          const index = get().tracks.length
+          const track = makeTrack(index, name)
+
+          set((s: any) => ({ tracks: [...s.tracks, track] }))
+          return { ok: true as const, track, cost }
+        },
+        quoteCapacityUpgrade: (trackId: string, mode: UpgradeMode) => {
+          const t = get().tracks.find((x: Track) => x.id === trackId)
+          if (!t) return { ok: false as const, reason: 'not_found' }
+          return quoteUpgrade(t.index, t.capacityLevel, mode, capacityLevelCost)
+        },
+
+        quoteSafetyUpgrade: (trackId: string, mode: UpgradeMode) => {
+          const t = get().tracks.find((x: Track) => x.id === trackId)
+          if (!t) return { ok: false as const, reason: 'not_found' }
+          return quoteUpgrade(t.index, t.safetyLevel, mode, safetyLevelCost)
+        },
+
+        quoteEntertainmentUpgrade: (trackId: string, mode: UpgradeMode) => {
+          const t = get().tracks.find((x: Track) => x.id === trackId)
+          if (!t) return { ok: false as const, reason: 'not_found' }
+          return quoteUpgrade(t.index, t.entertainmentLevel, mode, entertainmentLevelCost)
+        },
+        upgradeCapacityByMode: (trackId: string, mode: UpgradeMode) => {
+          const cur = get().tracks
+          const i = cur.findIndex((t: Track) => t.id === trackId)
+          if (i === -1) return { ok: false as const, reason: 'not_found' }
+
+          const t = cur[i]
+          const q = quoteUpgrade(t.index, t.capacityLevel, mode, capacityLevelCost)
+          if (!q.ok) return { ok: false as const, reason: 'already_max' }
+
+          const ok = useMoney.getState().spend(q.cost)
+          if (!ok) return { ok: false as const, reason: 'not_enough_money' }
+
+          const updated = [...cur]
+          updated[i] = recomputeTrack({ ...t, capacityLevel: q.toLevel })
+          set({ tracks: updated })
+          return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
+        },
+
+        upgradeSafetyByMode: (trackId: string, mode: UpgradeMode) => {
+          const cur = get().tracks
+          const i = cur.findIndex((t: Track) => t.id === trackId)
+          if (i === -1) return { ok: false as const, reason: 'not_found' }
+
+          const t = cur[i]
+          const q = quoteUpgrade(t.index, t.safetyLevel, mode, safetyLevelCost)
+          if (!q.ok) return { ok: false as const, reason: 'already_max' }
+
+          const ok = useMoney.getState().spend(q.cost)
+          if (!ok) return { ok: false as const, reason: 'not_enough_money' }
+
+          const updated = [...cur]
+          updated[i] = recomputeTrack({ ...t, safetyLevel: q.toLevel })
+          set({ tracks: updated })
+          return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
+        },
+
+        upgradeEntertainmentByMode: (trackId: string, mode: UpgradeMode) => {
+          const cur = get().tracks
+          const i = cur.findIndex((t: Track) => t.id === trackId)
+          if (i === -1) return { ok: false as const, reason: 'not_found' }
+
+          const t = cur[i]
+          const q = quoteUpgrade(t.index, t.entertainmentLevel, mode, entertainmentLevelCost)
+          if (!q.ok) return { ok: false as const, reason: 'already_max' }
+
+          const ok = useMoney.getState().spend(q.cost)
+          if (!ok) return { ok: false as const, reason: 'not_enough_money' }
+
+          const updated = [...cur]
+          updated[i] = recomputeTrack({ ...t, entertainmentLevel: q.toLevel })
+          set({ tracks: updated })
+          return { ok: true as const, cost: q.cost, newLevel: q.toLevel }
+        },
+        getById: (trackId: string) => get().tracks.find((t: Track) => t.id === trackId),
+
+        reset: () => set({ tracks: [] }),
+      }),
+      {
+        name: STORAGE_KEY,
+        storage: createJSONStorage(() => AsyncStorage),
+        version: 4,
+
+        migrate: (persisted: any) => {
+          const rawTracks = Array.isArray(persisted?.tracks) ? persisted.tracks : []
+          const migrated = rawTracks.map((t: any, idx: number) => {
+            const index = typeof t.index === 'number' ? t.index : idx
+            const name = typeof t.name === 'string' ? t.name : `Track ${index + 1}`
+
+            const legacyLevel = typeof t.level === 'number' ? t.level : 1
+
+            const capacityLevel =
+              typeof t.capacityLevel === 'number' ? t.capacityLevel : legacyLevel
+            const safetyLevel = typeof t.safetyLevel === 'number' ? t.safetyLevel : legacyLevel
+            const entertainmentLevel =
+              typeof t.entertainmentLevel === 'number' ? t.entertainmentLevel : 1
+
+            const base: Track = {
+              id: typeof t.id === 'string' ? t.id : `track_${index + 1}`,
+              index,
+              name,
+
+              rating: 1.0,
+              maxRating: 5.0,
+
+              capacityLevel,
+              capacity: 0,
+              maxCapacity: 0,
+
+              safetyLevel,
+              safety: 0,
+              maxSafety: 0,
+
+              entertainmentLevel,
+              entertainment: 0,
+              maxEntertainment: 0,
+              trackSize: (index + 1) * 10,
+            }
+
+            return recomputeTrack(base)
+          })
+
+          return { ...persisted, tracks: migrated }
+        },
+      },
+    ),
+  )
+}
+
+export { useTracks }
