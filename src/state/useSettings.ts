@@ -13,11 +13,16 @@ type SettingsState = {
   setSpeedVariance: (v: number) => void
   resetSpeedVariance: () => void
 
+  maxCarCount: number // 5..100
+  setMaxCarCount: (v: number) => void
+  resetMaxCarCount: () => void
+
   reset: () => void
 }
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 const DEFAULT_SPEED_VARIANCE = 12
+const DEFAULT_MAX_CAR_COUNT = 100
 const STORAGE_KEY = 'idle.settings.v1'
 
 let useSettings: any
@@ -28,6 +33,7 @@ if (Platform.OS === 'web') {
     enlargedLeader: false,
     enableAds: true,
     speedVariance: DEFAULT_SPEED_VARIANCE,
+    maxCarCount: DEFAULT_MAX_CAR_COUNT,
   }
   const listeners = new Set<() => void>()
 
@@ -78,10 +84,20 @@ if (Platform.OS === 'web') {
       state.speedVariance = DEFAULT_SPEED_VARIANCE
       notify()
     },
+    maxCarCount: state.maxCarCount,
+    setMaxCarCount: (v: number) => {
+      state.maxCarCount = clamp(Math.round(v), 5, 100)
+      notify()
+    },
+    resetMaxCarCount: () => {
+      state.maxCarCount = DEFAULT_MAX_CAR_COUNT
+      notify()
+    },
     reset: () => {
       state.enlargedLeader = false
       state.enableAds = true
       state.speedVariance = DEFAULT_SPEED_VARIANCE
+      state.maxCarCount = DEFAULT_MAX_CAR_COUNT
       notify()
     },
   }
@@ -99,6 +115,7 @@ if (Platform.OS === 'web') {
       enlargedLeader: state.enlargedLeader,
       enableAds: state.enableAds,
       speedVariance: state.speedVariance,
+      maxCarCount: state.maxCarCount,
     }
     return selector ? selector(fullState) : fullState
   }
@@ -108,6 +125,7 @@ if (Platform.OS === 'web') {
     enlargedLeader: state.enlargedLeader,
     enableAds: state.enableAds,
     speedVariance: state.speedVariance,
+    maxCarCount: state.maxCarCount,
   })
   useSettingsWeb.setState = (partial: Partial<typeof state>) => {
     Object.assign(state, partial)
@@ -134,11 +152,16 @@ if (Platform.OS === 'web') {
         setSpeedVariance: (v: number) => set({ speedVariance: clamp(Math.round(v), 0, 100) }),
         resetSpeedVariance: () => set({ speedVariance: DEFAULT_SPEED_VARIANCE }),
 
+        maxCarCount: DEFAULT_MAX_CAR_COUNT,
+        setMaxCarCount: (v: number) => set({ maxCarCount: clamp(Math.round(v), 5, 100) }),
+        resetMaxCarCount: () => set({ maxCarCount: DEFAULT_MAX_CAR_COUNT }),
+
         reset: () =>
           set({
             enlargedLeader: false,
             enableAds: true,
             speedVariance: DEFAULT_SPEED_VARIANCE,
+            maxCarCount: DEFAULT_MAX_CAR_COUNT,
           }),
       }),
       {

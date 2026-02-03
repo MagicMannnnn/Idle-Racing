@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { View, Text, Pressable, Alert, StyleSheet, ScrollView, Platform } from 'react-native'
 import Slider from '@react-native-community/slider'
-import { router } from 'expo-router'
+import { router, useNavigation } from 'expo-router'
 import { useOnboarding } from '../state/useOnboarding'
 import { useMoney } from '../state/useMoney'
 import { useTracks } from '../state/useTracks'
@@ -10,8 +10,11 @@ import { useTrackMaps } from '../state/useTrackMaps'
 import { useSettings } from '../state/useSettings'
 
 const DEFAULT_SPEED_VARIANCE = 12
+const DEFAULT_MAX_CAR_COUNT = 100
 
 export default function SettingsScreen() {
+  const navigation = useNavigation()
+
   const resetOnboarding = useOnboarding((s: any) => s.reset)
   const resetMoney = useMoney((s: any) => s.reset)
   const resetTracks = useTracks((s: any) => s.reset)
@@ -28,6 +31,10 @@ export default function SettingsScreen() {
   const speedVariance = useSettings((s: any) => s.speedVariance)
   const setSpeedVariance = useSettings((s: any) => s.setSpeedVariance)
   const resetSpeedVariance = useSettings((s: any) => s.resetSpeedVariance)
+
+  const maxCarCount = useSettings((s: any) => s.maxCarCount)
+  const setMaxCarCount = useSettings((s: any) => s.setMaxCarCount)
+  const resetMaxCarCount = useSettings((s: any) => s.resetMaxCarCount)
 
   const toggleLabel = useMemo(() => (enlargedLeader ? 'On' : 'Off'), [enlargedLeader])
   const adsToggleLabel = useMemo(() => (enableAds ? 'On' : 'Off'), [enableAds])
@@ -56,6 +63,7 @@ export default function SettingsScreen() {
   }
 
   const speedIsDefault = speedVariance === DEFAULT_SPEED_VARIANCE
+  const maxCarIsDefault = maxCarCount === DEFAULT_MAX_CAR_COUNT
 
   return (
     <View style={styles.screen}>
@@ -172,6 +180,58 @@ export default function SettingsScreen() {
                 style={[styles.secondaryBtnText, speedIsDefault && styles.secondaryBtnTextDisabled]}
               >
                 Reset to default ({DEFAULT_SPEED_VARIANCE})
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.rowTop}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Maximum car count</Text>
+              <Text style={styles.rowSubtitle}>
+                Limit car count to help performance or add variation to races.
+              </Text>
+            </View>
+
+            <View style={styles.valuePill}>
+              <Text style={styles.valuePillText}>{Math.round(maxCarCount)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.sliderWrap}>
+            <Slider
+              value={maxCarCount}
+              minimumValue={5}
+              maximumValue={100}
+              step={1}
+              onValueChange={setMaxCarCount}
+              minimumTrackTintColor="rgba(120, 170, 255, 0.95)"
+              maximumTrackTintColor="rgba(255,255,255,0.18)"
+              thumbTintColor="#FFFFFF"
+            />
+
+            <View style={styles.sliderMetaRow}>
+              <Text style={styles.sliderMeta}>5</Text>
+              <Text style={styles.sliderMeta}>100</Text>
+            </View>
+
+            <Pressable
+              onPress={resetMaxCarCount}
+              disabled={maxCarIsDefault}
+              style={({ pressed }) => [
+                styles.secondaryBtn,
+                maxCarIsDefault && styles.secondaryBtnDisabled,
+                pressed && !maxCarIsDefault && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.secondaryBtnText,
+                  maxCarIsDefault && styles.secondaryBtnTextDisabled,
+                ]}
+              >
+                Reset to default ({DEFAULT_MAX_CAR_COUNT})
               </Text>
             </Pressable>
           </View>
