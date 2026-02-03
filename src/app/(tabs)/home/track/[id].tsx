@@ -46,7 +46,17 @@ export default function TrackDetail() {
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.headerWrap}>
-        <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={10}>
+        <Pressable
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back()
+            } else {
+              router.replace('/(tabs)/home')
+            }
+          }}
+          style={styles.backButton}
+          hitSlop={10}
+        >
           <Text style={styles.backIcon}>‹</Text>
           <Text style={styles.backText}>Back</Text>
         </Pressable>

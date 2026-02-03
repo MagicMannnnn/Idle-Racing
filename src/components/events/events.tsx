@@ -19,9 +19,10 @@ type TrackLike = {
   maxEntertainment: number
 }
 
-const STEPS_MIN = [1, 5, 10, 30, 60, 180, 360, 720, 1440] as const
+const STEPS_MIN = [0.5, 1, 5, 10, 30, 60, 180, 360, 720, 1440] as const
 
 function formatDurationLabel(minutes: number) {
+  if (minutes < 1) return `${Math.round(minutes * 60)} sec`
   if (minutes < 60) return `${minutes} min`
   const hours = minutes / 60
   if (hours === 1) return `1 hour`

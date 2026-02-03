@@ -15,6 +15,10 @@ export type TrackDayEvent = {
   earntLastTick: number
   total: number
   incomeX2: boolean
+  // Snapshot of track stats at start
+  snapshotCapacity: number
+  snapshotTrackSize: number
+  snapshotRating: number
 }
 
 type EventsState = {
@@ -72,6 +76,11 @@ function getTrack(trackId: string) {
 }
 
 function cooldownForRuntime(runtimeMs: number) {
+  // 30 seconds -> 3 seconds cooldown
+  if (runtimeMs <= 30_000) return 3_000
+  // 1 minute -> 6 seconds cooldown
+  if (runtimeMs <= 60_000) return 6_000
+  // Default: 20% of runtime, min 10s, max 1 hour
   return clamp(Math.round(runtimeMs * 0.2), 10_000, 60 * 60 * 1000)
 }
 
@@ -106,9 +115,6 @@ function earningsPerSecond(capacity: number, trackSize: number, rating: number, 
 }
 
 function simulate(event: TrackDayEvent, now: number) {
-  const t = getTrack(event.trackId)
-  if (!t) return { next: event, creditedInt: 0 }
-
   const creditEnd = Math.min(now, event.endsAt)
   const seconds = Math.max(0, Math.floor((creditEnd - event.lastTickAt) / 1000))
   if (seconds <= 0) return { next: event, creditedInt: 0 }
@@ -119,8 +125,14 @@ function simulate(event: TrackDayEvent, now: number) {
   const mult = event.incomeX2 ? 2 : 1
   const prestigeMult = usePrestige.getState().calculateEarningsMultiplier()
 
+  // Use snapshotted values from when event started
   for (let i = 0; i < seconds; i++) {
-    const r = earningsPerSecond(t.capacity, t.trackSize, t.rating, seed)
+    const r = earningsPerSecond(
+      event.snapshotCapacity,
+      event.snapshotTrackSize,
+      event.snapshotRating,
+      seed,
+    )
     seed = r.nextSeed
     carry += r.perSec * mult * prestigeMult
   }
@@ -230,6 +242,10 @@ if (Platform.OS === 'web') {
         total: 0,
         incomeX2: false,
         seed: (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0,
+        // Snapshot current track stats
+        snapshotCapacity: t.capacity,
+        snapshotTrackSize: t.trackSize,
+        snapshotRating: t.rating,
       }
 
       state.activeByTrack = { ...state.activeByTrack, [trackId]: e }
@@ -407,6 +423,10 @@ if (Platform.OS === 'web') {
             total: 0,
             incomeX2: false,
             seed: (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0,
+            // Snapshot current track stats
+            snapshotCapacity: t.capacity,
+            snapshotTrackSize: t.trackSize,
+            snapshotRating: t.rating,
           }
 
           set((s: any) => ({ activeByTrack: { ...s.activeByTrack, [trackId]: e } }))

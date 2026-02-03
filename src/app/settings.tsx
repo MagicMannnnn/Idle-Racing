@@ -262,6 +262,13 @@ export default function SettingsScreen() {
               of each track.
             </Text>
           </View>
+
+          <View style={styles.tipItem}>
+            <Text style={styles.tipBullet}>•</Text>
+            <Text style={styles.tipText}>
+              Track upgrades are only applied once the current event has finished.
+            </Text>
+          </View>
         </View>
 
         <View style={styles.cardDanger}>
