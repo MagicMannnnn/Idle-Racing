@@ -94,7 +94,7 @@ function trackCostForIndex(index: number) {
 }
 
 function tierMult(index: number) {
-  return index === 0 ? 0.3 : 2 + Math.pow(4, Math.pow(index, 1.1))
+  return index === 0 ? 0.3 : 2 + Math.pow(4, Math.pow(index, 1.1)) * 2
 }
 
 function capacityBaseForIndex(index: number) {
