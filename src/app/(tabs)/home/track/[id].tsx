@@ -11,16 +11,16 @@ import { capacityLevelCost } from '@/src/state/useTracks'
 
 export default function TrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const track = useTracks((s) => s.tracks.find((t) => t.id === id))
-  const money = useMoney((s) => s.money)
+  const track = useTracks((s: any) => s.tracks.find((t: any) => t.id === id))
+  const money = useMoney((s: any) => s.money)
 
-  const quoteCapacityUpgrade = useTracks((s) => s.quoteCapacityUpgrade)
-  const quoteSafetyUpgrade = useTracks((s) => s.quoteSafetyUpgrade)
-  const quoteEntertainmentUpgrade = useTracks((s) => s.quoteEntertainmentUpgrade)
+  const quoteCapacityUpgrade = useTracks((s: any) => s.quoteCapacityUpgrade)
+  const quoteSafetyUpgrade = useTracks((s: any) => s.quoteSafetyUpgrade)
+  const quoteEntertainmentUpgrade = useTracks((s: any) => s.quoteEntertainmentUpgrade)
 
-  const upgradeCapacityByMode = useTracks((s) => s.upgradeCapacityByMode)
-  const upgradeSafetyByMode = useTracks((s) => s.upgradeSafetyByMode)
-  const upgradeEntertainmentByMode = useTracks((s) => s.upgradeEntertainmentByMode)
+  const upgradeCapacityByMode = useTracks((s: any) => s.upgradeCapacityByMode)
+  const upgradeSafetyByMode = useTracks((s: any) => s.upgradeSafetyByMode)
+  const upgradeEntertainmentByMode = useTracks((s: any) => s.upgradeEntertainmentByMode)
 
   const [mode, setMode] = useState<UpgradeMode>('x1')
 

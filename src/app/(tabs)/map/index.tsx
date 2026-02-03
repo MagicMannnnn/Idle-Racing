@@ -35,7 +35,7 @@ function ratingLabel(r: number) {
 }
 
 export default function MapIndex() {
-  const tracks = useTracks((s) => s.tracks)
+  const tracks = useTracks((s: any) => s.tracks)
 
   const [buyOpen, setBuyOpen] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
@@ -43,12 +43,11 @@ export default function MapIndex() {
   const [carNumber, setCarNumber] = useState('')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const carNames = useTrackMaps((s) => s.carNames)
-  const carNumbers = useTrackMaps((s) => s.carNumbers)
-  const setNewCarName = useTrackMaps((s) => s.setCarName)
-  const canAfford = useMoney((s) => s.canAfford)
-  const removeMoney = useMoney((s) => s.remove)
-
+  const carNames = useTrackMaps((s: any) => s.carNames)
+  const carNumbers = useTrackMaps((s: any) => s.carNumbers)
+  const setNewCarName = useTrackMaps((s: any) => s.setCarName)
+  const canAfford = useMoney((s: any) => s.canAfford)
+  const removeMoney = useMoney((s: any) => s.remove)
   const defaultCarNames: string[] = [
     'Bob',
     'Sally',
@@ -117,7 +116,7 @@ export default function MapIndex() {
 
   const avg = useMemo(() => {
     if (tracks.length === 0) return 0
-    return tracks.reduce((a, t) => a + t.rating, 0) / tracks.length
+    return tracks.reduce((a: number, t: any) => a + t.rating, 0) / tracks.length
   }, [tracks])
 
   return (

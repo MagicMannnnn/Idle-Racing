@@ -190,19 +190,19 @@ export function TrackMapEventLiveView({
   maxEntertainment,
   trackSize,
 }: Props) {
-  const ensure = useTrackMaps((s) => s.ensure)
-  const grid = useTrackMaps((s) => s.get(trackId))
+  const ensure = useTrackMaps((s: any) => s.ensure)
+  const grid = useTrackMaps((s: any) => s.get(trackId))
 
-  const eventInProgress = !!useEvents((s) => s.getActive(trackId))
+  const eventInProgress = !!useEvents((s: any) => s.getActive(trackId))
   const entertainmentValue =
     eventInProgress && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
 
   const [now, setNow] = useState(() => Date.now())
 
-  const startTicker = useEvents((s) => s.startTicker)
-  const tickOnce = useEvents((s) => s.tickOnce)
+  const startTicker = useEvents((s: any) => s.startTicker)
+  const tickOnce = useEvents((s: any) => s.tickOnce)
 
-  const cooldownMs = useEvents((s) => s.getCooldownRemainingMs(trackId, now))
+  const cooldownMs = useEvents((s: any) => s.getCooldownRemainingMs(trackId, now))
   const inCooldown = cooldownMs > 0
 
   const showCarsVisual = eventInProgress || inCooldown
@@ -210,7 +210,10 @@ export function TrackMapEventLiveView({
 
   const isFocused = useIsFocused()
 
-  const firstTrackIdx = useMemo(() => grid?.cells.findIndex((c) => c === 'track'), [grid?.cells])
+  const firstTrackIdx = useMemo(
+    () => grid?.cells.findIndex((c: any) => c === 'track'),
+    [grid?.cells],
+  )
 
   const [leaderId, setLeaderId] = useState<number | null>(null)
 

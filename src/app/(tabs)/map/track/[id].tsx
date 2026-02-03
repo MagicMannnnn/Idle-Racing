@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function MapTrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const track = useTracks((s) => s.tracks.find((t) => t.id === id))
+  const track = useTracks((s: any) => s.tracks.find((t: any) => t.id === id))
 
   const size =
     Dimensions.get('window').width > Dimensions.get('window').height

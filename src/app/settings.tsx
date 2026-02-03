@@ -12,22 +12,22 @@ import { useSettings } from '../state/useSettings'
 const DEFAULT_SPEED_VARIANCE = 12
 
 export default function SettingsScreen() {
-  const resetOnboarding = useOnboarding((s) => s.reset)
-  const resetMoney = useMoney((s) => s.reset)
-  const resetTracks = useTracks((s) => s.reset)
-  const resetEvents = useEvents((s) => s.reset)
-  const resetMaps = useTrackMaps((s) => s.resetAll)
-  const resetSettings = useSettings((s) => s.reset)
+  const resetOnboarding = useOnboarding((s: any) => s.reset)
+  const resetMoney = useMoney((s: any) => s.reset)
+  const resetTracks = useTracks((s: any) => s.reset)
+  const resetEvents = useEvents((s: any) => s.reset)
+  const resetMaps = useTrackMaps((s: any) => s.resetAll)
+  const resetSettings = useSettings((s: any) => s.reset)
 
-  const enlargedLeader = useSettings((s) => s.enlargedLeader)
-  const setEnlargedLeader = useSettings((s) => s.setEnlargedLeader)
+  const enlargedLeader = useSettings((s: any) => s.enlargedLeader)
+  const setEnlargedLeader = useSettings((s: any) => s.setEnlargedLeader)
 
-  const enableAds = useSettings((s) => s.enableAds)
-  const setEnableAds = useSettings((s) => s.setEnableAds)
+  const enableAds = useSettings((s: any) => s.enableAds)
+  const setEnableAds = useSettings((s: any) => s.setEnableAds)
 
-  const speedVariance = useSettings((s) => s.speedVariance)
-  const setSpeedVariance = useSettings((s) => s.setSpeedVariance)
-  const resetSpeedVariance = useSettings((s) => s.resetSpeedVariance)
+  const speedVariance = useSettings((s: any) => s.speedVariance)
+  const setSpeedVariance = useSettings((s: any) => s.setSpeedVariance)
+  const resetSpeedVariance = useSettings((s: any) => s.resetSpeedVariance)
 
   const toggleLabel = useMemo(() => (enlargedLeader ? 'On' : 'Off'), [enlargedLeader])
   const adsToggleLabel = useMemo(() => (enableAds ? 'On' : 'Off'), [enableAds])
