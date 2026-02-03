@@ -20,6 +20,16 @@ export default function MapTrackDetail() {
 
   const initialGridSize = useMemo(() => {
     if (!track) return 5
+    if (track.index > 50) return 30
+    if (track.index > 14) {
+      // Linear interpolation from 20 (at 14) to 30 (at 50)
+      const minIndex = 14
+      const maxIndex = 50
+      const minSize = 20
+      const maxSize = 30
+      const t = (track.index - minIndex) / (maxIndex - minIndex)
+      return Math.round(minSize + t * (maxSize - minSize))
+    }
     return track.index < 2 ? 5 + track.index * 2 : 6 + track.index
   }, [track])
 

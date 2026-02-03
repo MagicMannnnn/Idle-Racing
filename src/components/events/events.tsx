@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { useEvents } from '@/src/state/useEvents'
+import { useEvents, type EventType, getAvailableEvents } from '@/src/state/useEvents'
 import { formatMoney } from '@/src/components/money/MoneyHeader'
 import { useRewardedAd } from '@/src/ads/useRewardedAd'
 import { useSettings } from '@/src/state/useSettings'
@@ -17,9 +17,60 @@ type TrackLike = {
   maxSafety: number
   entertainment: number
   maxEntertainment: number
+  rating: number
 }
 
-const STEPS_MIN = [0.5, 1, 5, 10, 30, 60, 180, 360, 720, 1440] as const
+type EventConfig = {
+  type: EventType
+  label: string
+  durations: readonly number[] // in minutes
+  multiplier: number
+}
+
+const EVENT_CONFIGS: EventConfig[] = [
+  {
+    type: 'open_track_day',
+    label: 'Open Track Day',
+    durations: [0.5, 1, 5, 10, 15] as const,
+    multiplier: 1,
+  },
+  {
+    type: 'closed_testing',
+    label: 'Closed Testing',
+    durations: [60, 180, 360, 720] as const,
+    multiplier: 1.2,
+  },
+  {
+    type: 'club_race_day',
+    label: 'Club Race Day',
+    durations: [360, 720] as const,
+    multiplier: 1.5,
+  },
+  {
+    type: 'club_race_weekend',
+    label: 'Club Race Weekend',
+    durations: [1440, 2160, 2880] as const,
+    multiplier: 1.8,
+  },
+  {
+    type: 'national_race_day',
+    label: 'National Race Day',
+    durations: [360, 720] as const,
+    multiplier: 2.5,
+  },
+  {
+    type: 'national_race_weekend',
+    label: 'National Race Weekend',
+    durations: [1440, 2160, 2880] as const,
+    multiplier: 3,
+  },
+  {
+    type: 'endurance_race_weekend',
+    label: 'Endurance Race Weekend',
+    durations: [2880] as const,
+    multiplier: 4,
+  },
+]
 
 function formatDurationLabel(minutes: number) {
   if (minutes < 1) return `${Math.round(minutes * 60)} sec`
@@ -30,18 +81,36 @@ function formatDurationLabel(minutes: number) {
 }
 
 function formatCountdown(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(s / 60)
-  const remS = s % 60
-  if (m <= 0) return `${remS}s`
-  return `${m}m ${remS}s`
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`
+  }
+  return `${seconds}s`
 }
 
 export default function TrackEvents(props: { track: TrackLike }) {
   const { track } = props
 
   const [now, setNow] = useState(() => Date.now())
-  const [stepIdx, setStepIdx] = useState(0)
+  const [eventTypeIdx, setEventTypeIdx] = useState(0)
+  const [durationIdx, setDurationIdx] = useState(0)
+
+  // Filter events based on track rating
+  const availableEventTypes = useMemo(() => getAvailableEvents(track.rating), [track.rating])
+  const availableEvents = useMemo(
+    () => EVENT_CONFIGS.filter((evt) => availableEventTypes.includes(evt.type)),
+    [availableEventTypes],
+  )
+  const selectedEvent = availableEvents[eventTypeIdx] || availableEvents[0]
+  const minutes = selectedEvent.durations[durationIdx]
+  const runtimeMs = minutes * 60_000
 
   // ✅ Subscribe directly (fixes “need to navigate away/back”)
   const active = useEvents((s: any) => s.activeByTrack[track.id])
@@ -50,8 +119,10 @@ export default function TrackEvents(props: { track: TrackLike }) {
   const startTicker = useEvents((s: any) => s.startTicker)
   const tickOnce = useEvents((s: any) => s.tickOnce)
 
-  const locked = useEvents((s: any) => s.isTrackLocked(track.id, now))
-  const cooldownMs = useEvents((s: any) => s.getCooldownRemainingMs(track.id, now))
+  const locked = useEvents((s: any) => s.isTrackLocked(track.id, selectedEvent.type, now))
+  const cooldownMs = useEvents((s: any) =>
+    s.getCooldownRemainingMs(track.id, selectedEvent.type, now),
+  )
   const inCooldown = cooldownMs > 0
   const enableAds = useSettings((s: any) => s.enableAds) && Platform.OS !== 'web'
 
@@ -75,9 +146,6 @@ export default function TrackEvents(props: { track: TrackLike }) {
     return () => clearInterval(t)
   }, [tickOnce])
 
-  const minutes = STEPS_MIN[stepIdx]
-  const runtimeMs = minutes * 60_000
-
   const running = !!active
   const endsInMs = active ? active.endsAt - now : 0
 
@@ -91,7 +159,7 @@ export default function TrackEvents(props: { track: TrackLike }) {
   const isBoosted = !!(active as any)?.incomeX2
 
   const onRun = () => {
-    const res = startTrackDay(track.id, runtimeMs)
+    const res = startTrackDay(track.id, runtimeMs, selectedEvent.type, selectedEvent.multiplier)
     void res
   }
 
@@ -160,7 +228,18 @@ export default function TrackEvents(props: { track: TrackLike }) {
       <View style={styles.card}>
         <View style={styles.eventTopRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.cardTitle}>Race Day</Text>
+            <Text style={styles.cardTitle}>
+              {active
+                ? EVENT_CONFIGS.find((evt) => evt.type === active.eventType)?.label ||
+                  selectedEvent.label
+                : selectedEvent.label}
+              {(active ? active.earningsMultiplier : selectedEvent.multiplier) !== 1 && (
+                <Text style={styles.multiplierText}>
+                  {' '}
+                  • x{active ? active.earningsMultiplier : selectedEvent.multiplier} earnings
+                </Text>
+              )}
+            </Text>
             <Text style={styles.eventSubtitle}>free to run • earns money while running</Text>
           </View>
 
@@ -177,18 +256,67 @@ export default function TrackEvents(props: { track: TrackLike }) {
           </View>
         </View>
 
+        {/* Event Type Selector */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.stepRow}
         >
-          {STEPS_MIN.map((m, i) => {
-            const activeStep = i === stepIdx
+          {availableEvents.map((evt, i) => {
+            const activeType = i === eventTypeIdx
             const disabled = running
             return (
               <Pressable
-                key={`track_day_${m}`}
-                onPress={() => setStepIdx(i)}
+                key={`event_type_${evt.type}`}
+                onPress={() => {
+                  setEventTypeIdx(i)
+                  setDurationIdx(0) // Reset to first duration option
+                }}
+                disabled={disabled}
+                style={({ pressed }) => [
+                  styles.eventTypeChip,
+                  activeType && styles.eventTypeChipActive,
+                  disabled && styles.stepChipDisabled,
+                  pressed && !disabled && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.eventTypeChipText,
+                    activeType && styles.eventTypeChipTextActive,
+                    disabled && styles.stepChipTextDisabled,
+                  ]}
+                >
+                  {evt.label}
+                </Text>
+                {evt.multiplier !== 1 && (
+                  <Text
+                    style={[
+                      styles.eventTypeMultiplier,
+                      activeType && styles.eventTypeMultiplierActive,
+                    ]}
+                  >
+                    x{evt.multiplier}
+                  </Text>
+                )}
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+
+        {/* Duration Selector */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.stepRow}
+        >
+          {selectedEvent.durations.map((m, i) => {
+            const activeStep = i === durationIdx
+            const disabled = running
+            return (
+              <Pressable
+                key={`duration_${m}`}
+                onPress={() => setDurationIdx(i)}
                 disabled={disabled}
                 style={({ pressed }) => [
                   styles.stepChip,
@@ -300,6 +428,11 @@ const styles = StyleSheet.create({
   pressed: { transform: [{ scale: 0.99 }], opacity: 0.95 },
 
   cardTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  multiplierText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   eventSubtitle: {
     marginTop: 6,
     color: 'rgba(255,255,255,0.65)',
@@ -316,10 +449,47 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
+    minWidth: 140,
+    alignItems: 'center',
   },
   eventStatusText: { color: 'rgba(255,255,255,0.90)', fontWeight: '900', fontSize: 12 },
 
   stepRow: { gap: 8, marginTop: 12, paddingBottom: 2 },
+
+  // Event type selector styles
+  eventTypeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  eventTypeChipActive: {
+    backgroundColor: 'rgba(59, 130, 246, 0.20)',
+    borderColor: 'rgba(59, 130, 246, 0.35)',
+  },
+  eventTypeChipText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  eventTypeChipTextActive: {
+    color: 'rgba(255,255,255,0.95)',
+  },
+  eventTypeMultiplier: {
+    color: 'rgba(255,255,255,0.60)',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  eventTypeMultiplierActive: {
+    color: 'rgba(59, 130, 246, 0.95)',
+  },
+
+  // Duration selector styles
   stepChip: {
     paddingHorizontal: 12,
     paddingVertical: 10,
