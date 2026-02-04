@@ -27,6 +27,15 @@ function calculateKnowledgeFromTracks(): number {
   //printKnowledgeTable()
 
   if (totalLevels < 500) return 0
+
+  if (totalLevels <= 1908) {
+    console.log('total levels: ', totalLevels)
+    // Linear growth for first 1900 levels
+    const A = 1.0 / 5.8
+    const B = 500
+    return Math.floor(A * (totalLevels - B))
+  }
+
   const a = 0.00336
   const b = 0.023
   const c = 1.05

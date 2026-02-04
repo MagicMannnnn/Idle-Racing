@@ -41,7 +41,7 @@ type InnerCorner = 'NE' | 'SE' | 'SW' | 'NW'
 
 type TrackKerb = { outer: KerbSides }
 
-function KerbStrip({ side }: { side: Side }) {
+const KerbStrip = React.memo(({ side }: { side: Side }) => {
   const stripes = 6
   const isHorizontal = side === 'N' || side === 'S'
   const wrapStyle = isHorizontal
@@ -62,9 +62,9 @@ function KerbStrip({ side }: { side: Side }) {
       ))}
     </View>
   )
-}
+})
 
-function KerbCorner({ corner }: { corner: InnerCorner }) {
+const KerbCorner = React.memo(({ corner }: { corner: InnerCorner }) => {
   const thickness = 6
   const stripes = 6
 
@@ -139,9 +139,9 @@ function KerbCorner({ corner }: { corner: InnerCorner }) {
       </View>
     </View>
   )
-}
+})
 
-function CheckerboardOverlay({ size }: { size: number }) {
+const CheckerboardOverlay = React.memo(({ size }: { size: number }) => {
   const squares = 6
   const squareSize = size / squares
   const rows = Array.from({ length: squares })
@@ -178,7 +178,82 @@ function CheckerboardOverlay({ size }: { size: number }) {
       ))}
     </View>
   )
-}
+})
+
+const GridCell = React.memo(
+  ({
+    trackId,
+    index,
+    cellPx,
+    mapSize,
+    type,
+    firstTrackIdx,
+    trackKerb,
+    innerCorners,
+    showStand,
+    standRotation,
+    standSeed,
+    entertainmentValue,
+  }: {
+    trackId: string
+    index: number
+    cellPx: number
+    mapSize: number
+    type: string
+    firstTrackIdx: number
+    trackKerb?: TrackKerb
+    innerCorners?: InnerCorner[]
+    showStand: boolean
+    standRotation: string
+    standSeed: number
+    entertainmentValue: number
+  }) => {
+    const x = index % mapSize
+    const y = Math.floor(index / mapSize)
+
+    return (
+      <View
+        key={`${trackId}_${index}`}
+        style={[
+          styles.cell,
+          {
+            width: cellPx,
+            height: cellPx,
+            marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
+            marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+          },
+          type === 'empty' && styles.empty,
+          type === 'infield' && styles.infield,
+          type === 'track' && styles.track,
+        ]}
+      >
+        {index === firstTrackIdx && type === 'track' ? <CheckerboardOverlay size={cellPx} /> : null}
+        {type === 'track' && trackKerb ? (
+          <>
+            {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
+            {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
+            {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
+            {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
+          </>
+        ) : null}
+
+        {innerCorners?.length
+          ? innerCorners.map((c) => <KerbCorner key={`${trackId}_${index}_${c}`} corner={c} />)
+          : null}
+
+        {showStand && (
+          <StandIcon
+            standRotation={standRotation}
+            seed={standSeed}
+            minDotsPerBar={entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)}
+            entertainmentValue={entertainmentValue}
+            size={Math.max(cellPx * 0.1, 6)}
+          />
+        )}
+      </View>
+    )
+  },
+)
 
 export function TrackMapEventLiveView({
   trackId,
@@ -190,23 +265,22 @@ export function TrackMapEventLiveView({
   maxEntertainment,
   trackSize,
 }: Props) {
+  const renderStartTime = useRef(performance.now())
+  const renderCount = useRef(0)
+
   const ensure = useTrackMaps((s: any) => s.ensure)
   const grid = useTrackMaps((s: any) => s.get(trackId))
 
-  const eventInProgress = !!useEvents((s: any) => s.getActive(trackId))
-  const entertainmentValue =
-    eventInProgress && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
-
-  const [now, setNow] = useState(() => Date.now())
-
+  // Get store methods (not reactive - won't cause re-renders)
   const startTicker = useEvents((s: any) => s.startTicker)
   const tickOnce = useEvents((s: any) => s.tickOnce)
+  const getCooldownRemainingMs = useEvents((s: any) => s.getCooldownRemainingMs)
+  const getActive = useEvents((s: any) => s.getActive)
 
-  const cooldownMs = useEvents((s: any) => s.getCooldownRemainingMs(trackId, now))
-  const inCooldown = cooldownMs > 0
-
-  const showCarsVisual = eventInProgress || inCooldown
-  const runSim = eventInProgress
+  // Track visual state that actually needs to trigger re-renders
+  const [showCarsVisual, setShowCarsVisual] = useState(false)
+  const [runSim, setRunSim] = useState(false)
+  const [entertainmentValue, setEntertainmentValue] = useState(0)
 
   const isFocused = useIsFocused()
 
@@ -221,14 +295,51 @@ export function TrackMapEventLiveView({
     startTicker()
   }, [startTicker])
 
+  // Update visual state based on event/cooldown status
   useEffect(() => {
     const t = setInterval(() => {
       const n = Date.now()
-      setNow(n)
       tickOnce(n)
+
+      const hasActiveEvent = !!getActive(trackId)
+      const cooldown = getCooldownRemainingMs(trackId, n)
+      const nowInCooldown = cooldown > 0
+
+      const shouldShowCars = hasActiveEvent || nowInCooldown
+      const shouldRunSim = hasActiveEvent
+
+      // Calculate entertainment value
+      const entValue =
+        hasActiveEvent && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
+
+      // Only update state if visual state actually changed
+      setShowCarsVisual((prev) => {
+        if (prev !== shouldShowCars) return shouldShowCars
+        return prev
+      })
+
+      setRunSim((prev) => {
+        if (prev !== shouldRunSim) return shouldRunSim
+        return prev
+      })
+
+      setEntertainmentValue((prev) => {
+        if (prev !== entValue) return entValue
+        return prev
+      })
     }, 1000)
     return () => clearInterval(t)
-  }, [tickOnce])
+  }, [tickOnce, trackId, getCooldownRemainingMs, getActive, entertainment, maxEntertainment])
+
+  // Measure render time
+  useEffect(() => {
+    renderCount.current++
+    const renderTime = performance.now() - renderStartTime.current
+    console.log(
+      `[TrackMapEventLiveView] Render #${renderCount.current} took ${renderTime.toFixed(2)}ms`,
+    )
+    renderStartTime.current = performance.now()
+  })
 
   useEffect(() => {
     ensure(trackId, initialGridSize)
@@ -542,65 +653,30 @@ export function TrackMapEventLiveView({
           <View style={{ width: wrapW, alignSelf: 'center' }}>
             <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
               {Array.from({ length: mapSize * mapSize }).map((_, i) => {
-                const x = i % mapSize
-                const y = Math.floor(i / mapSize)
-
                 const type = cells[i] ?? 'empty'
-
                 const showStand = type === 'empty' && standSet.has(i)
                 const standRotation = showStand
                   ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
                   : '0deg'
-
                 const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
                 const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
 
                 return (
-                  <View
+                  <GridCell
                     key={`${trackId}_${i}`}
-                    style={[
-                      styles.cell,
-                      {
-                        width: cellPx,
-                        height: cellPx,
-                        marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
-                        marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
-                      },
-                      type === 'empty' && styles.empty,
-                      type === 'infield' && styles.infield,
-                      type === 'track' && styles.track,
-                    ]}
-                  >
-                    {i === firstTrackIdx && type === 'track' ? (
-                      <CheckerboardOverlay size={cellPx} />
-                    ) : null}
-                    {type === 'track' && trackKerb ? (
-                      <>
-                        {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
-                        {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
-                        {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
-                        {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
-                      </>
-                    ) : null}
-
-                    {innerCorners?.length
-                      ? innerCorners.map((c) => (
-                          <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />
-                        ))
-                      : null}
-
-                    {showStand && (
-                      <StandIcon
-                        standRotation={standRotation}
-                        seed={fnv1a32(trackId + i)}
-                        minDotsPerBar={
-                          entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
-                        }
-                        entertainmentValue={entertainmentValue}
-                        size={Math.max(cellPx * 0.1, 6)}
-                      />
-                    )}
-                  </View>
+                    trackId={trackId}
+                    index={i}
+                    cellPx={cellPx}
+                    mapSize={mapSize}
+                    type={type}
+                    firstTrackIdx={firstTrackIdx}
+                    trackKerb={trackKerb}
+                    innerCorners={innerCorners}
+                    showStand={showStand}
+                    standRotation={standRotation}
+                    standSeed={fnv1a32(trackId + i)}
+                    entertainmentValue={entertainmentValue}
+                  />
                 )
               })}
 
@@ -632,65 +708,30 @@ export function TrackMapEventLiveView({
             <View style={{ width: wrapW, alignSelf: 'center' }}>
               <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
                 {Array.from({ length: mapSize * mapSize }).map((_, i) => {
-                  const x = i % mapSize
-                  const y = Math.floor(i / mapSize)
-
                   const type = cells[i] ?? 'empty'
-
                   const showStand = type === 'empty' && standSet.has(i)
                   const standRotation = showStand
                     ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
                     : '0deg'
-
                   const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
                   const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
 
                   return (
-                    <View
+                    <GridCell
                       key={`${trackId}_${i}`}
-                      style={[
-                        styles.cell,
-                        {
-                          width: cellPx,
-                          height: cellPx,
-                          marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
-                          marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
-                        },
-                        type === 'empty' && styles.empty,
-                        type === 'infield' && styles.infield,
-                        type === 'track' && styles.track,
-                      ]}
-                    >
-                      {i === firstTrackIdx && type === 'track' ? (
-                        <CheckerboardOverlay size={cellPx} />
-                      ) : null}
-                      {type === 'track' && trackKerb ? (
-                        <>
-                          {trackKerb.outer.N ? <KerbStrip side="N" /> : null}
-                          {trackKerb.outer.E ? <KerbStrip side="E" /> : null}
-                          {trackKerb.outer.S ? <KerbStrip side="S" /> : null}
-                          {trackKerb.outer.W ? <KerbStrip side="W" /> : null}
-                        </>
-                      ) : null}
-
-                      {innerCorners?.length
-                        ? innerCorners.map((c) => (
-                            <KerbCorner key={`${trackId}_${i}_${c}`} corner={c} />
-                          ))
-                        : null}
-
-                      {showStand && (
-                        <StandIcon
-                          standRotation={standRotation}
-                          seed={fnv1a32(trackId + i)}
-                          minDotsPerBar={
-                            entertainmentValue === 0 ? 0 : 1 + Math.floor(entertainmentValue / 0.31)
-                          }
-                          entertainmentValue={entertainmentValue}
-                          size={Math.max(cellPx * 0.1, 6)}
-                        />
-                      )}
-                    </View>
+                      trackId={trackId}
+                      index={i}
+                      cellPx={cellPx}
+                      mapSize={mapSize}
+                      type={type}
+                      firstTrackIdx={firstTrackIdx}
+                      trackKerb={trackKerb}
+                      innerCorners={innerCorners}
+                      showStand={showStand}
+                      standRotation={standRotation}
+                      standSeed={fnv1a32(trackId + i)}
+                      entertainmentValue={entertainmentValue}
+                    />
                   )
                 })}
 

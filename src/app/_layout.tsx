@@ -20,11 +20,11 @@ if (__DEV__) {
     const { useEvents } = require('../state/useEvents')
     useEvents.getState().tickOnce()
 
-    console.log(`⏰ Simulated ${hoursAhead} hours ahead`)
+    console.log(`Simulated ${hoursAhead} hours ahead`)
 
     return () => {
       Date.now = originalDateNow
-      console.log('⏰ Time simulation restored')
+      console.log('Time simulation restored')
     }
   }
 }
