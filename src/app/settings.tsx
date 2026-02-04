@@ -10,7 +10,7 @@ import { useTrackMaps } from '../state/useTrackMaps'
 import { useSettings } from '../state/useSettings'
 
 const DEFAULT_SPEED_VARIANCE = 12
-const DEFAULT_MAX_CAR_COUNT = 100
+const DEFAULT_MAX_CAR_COUNT = 20
 
 export default function SettingsScreen() {
   const navigation = useNavigation()

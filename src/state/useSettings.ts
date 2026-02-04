@@ -22,7 +22,7 @@ type SettingsState = {
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n))
 const DEFAULT_SPEED_VARIANCE = 12
-const DEFAULT_MAX_CAR_COUNT = 100
+const DEFAULT_MAX_CAR_COUNT = 20
 const STORAGE_KEY = 'idle.settings.v1'
 
 let useSettings: any
