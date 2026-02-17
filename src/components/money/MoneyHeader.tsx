@@ -15,7 +15,11 @@ export default function Money() {
 
 export function formatMoney(n: BigNum) {
   const num = BN.from(n)
-
+  if (num.gte(1e42))
+    return num.toExponential ? num.toExponential(2) : num.toNumber().toExponential(2)
+  if (num.gte(1e39)) return `${num.div(1e39).toFixed(1)}G`
+  if (num.gte(1e36)) return `${num.div(1e36).toFixed(1)}V`
+  if (num.gte(1e33)) return `${num.div(1e33).toFixed(1)}U`
   if (num.gte(1e30)) return `${num.div(1e30).toFixed(1)}D`
   if (num.gte(1e27)) return `${num.div(1e27).toFixed(1)}N`
   if (num.gte(1e24)) return `${num.div(1e24).toFixed(1)}O`

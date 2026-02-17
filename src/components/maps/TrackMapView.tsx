@@ -136,8 +136,8 @@ export function TrackMapView({
   capacity,
   maxCapacity,
 }: Props) {
-  const ensure = useTrackMaps((s) => s.ensure)
-  const grid = useTrackMaps((s) => s.get(trackId))
+  const ensure = useTrackMaps((s: any) => s.ensure)
+  const grid = useTrackMaps((s: any) => s.get(trackId))
 
   useEffect(() => {
     ensure(trackId, initialGridSize)
