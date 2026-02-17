@@ -1,5 +1,5 @@
+import { useEffect, useReducer } from 'react'
 import { Platform } from 'react-native'
-import { useReducer, useEffect } from 'react'
 
 type OnboardingState = {
   hasHydrated?: boolean
@@ -116,7 +116,7 @@ if (Platform.OS === 'web') {
       {
         name: STORAGE_KEY,
         storage: createJSONStorage(() => AsyncStorage),
-        onRehydrateStorage: () => (state: any, error: any) => {
+        onRehydrateStorage: () => () => {
           useOnboarding.setState({ hasHydrated: true })
         },
         version: 1,

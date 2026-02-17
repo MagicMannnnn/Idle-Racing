@@ -1,21 +1,19 @@
-import React, { use, useMemo } from 'react'
-import { View, Text, Pressable, Alert, StyleSheet, ScrollView, Platform } from 'react-native'
 import Slider from '@react-native-community/slider'
-import { router, useNavigation } from 'expo-router'
-import { useOnboarding } from '../state/useOnboarding'
-import { useMoney } from '../state/useMoney'
-import { useTracks } from '../state/useTracks'
-import { useEvents } from '../state/useEvents'
-import { useTrackMaps } from '../state/useTrackMaps'
-import { useSettings } from '../state/useSettings'
-import { usePrestige } from '../state/usePrestige'
+import { useEvents } from '@state/useEvents'
+import { useMoney } from '@state/useMoney'
+import { useOnboarding } from '@state/useOnboarding'
+import { usePrestige } from '@state/usePrestige'
+import { useSettings } from '@state/useSettings'
+import { useTrackMaps } from '@state/useTrackMaps'
+import { useTracks } from '@state/useTracks'
+import { router } from 'expo-router'
+import React, { useMemo } from 'react'
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 const DEFAULT_SPEED_VARIANCE = 12
 const DEFAULT_MAX_CAR_COUNT = 20
 
 export default function SettingsScreen() {
-  const navigation = useNavigation()
-
   const resetOnboarding = useOnboarding((s: any) => s.reset)
   const resetMoney = useMoney((s: any) => s.reset)
   const resetTracks = useTracks((s: any) => s.reset)

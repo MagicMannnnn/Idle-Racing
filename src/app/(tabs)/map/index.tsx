@@ -1,23 +1,21 @@
-import { useMoney } from '@/src/state/useMoney'
-import { useOnboarding } from '@/src/state/useOnboarding'
-import { useTrackMaps } from '@/src/state/useTrackMaps'
-import { useTracks } from '@/src/state/useTracks'
-import { useEvents } from '@/src/state/useEvents'
 import { Ionicons } from '@expo/vector-icons'
+import { useMoney } from '@state/useMoney'
+import { useTrackMaps } from '@state/useTrackMaps'
+import { useTracks } from '@state/useTracks'
+import formatMoney from '@utils/money'
 import { router } from 'expo-router'
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   FlatList,
+  Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
-  Platform,
-  Modal,
   TextInput,
-  ScrollView,
+  View,
 } from 'react-native'
-import { formatMoney } from '@/src/components/money/MoneyHeader'
 
 function formatRating(r: number) {
   return r.toFixed(1)
@@ -66,14 +64,6 @@ export default function MapIndex() {
     'Sam',
     'Charlie',
   ]
-
-  const onOpenBuy = () => {
-    setError(null)
-    setCarName('')
-    setCarNumber('')
-    setEditingIndex(null)
-    setBuyOpen(true)
-  }
 
   const onOpenEdit = (index: number) => {
     setManageOpen(false)

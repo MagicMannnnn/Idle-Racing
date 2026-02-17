@@ -1,7 +1,7 @@
-import { Platform } from 'react-native'
-import { useReducer, useEffect } from 'react'
+import { type BigNum, BN, clamp0 } from '@utils/bignum'
 import Decimal from 'break_infinity.js'
-import { BN, clamp0, type BigNum } from '@/src/utils/bignum'
+import { useEffect, useReducer } from 'react'
+import { Platform } from 'react-native'
 
 type MoneyState = {
   money: Decimal

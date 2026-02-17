@@ -1,9 +1,9 @@
+import { useRewardedAd } from '@hooks/ads/useRewardedAd'
+import { type EventType, getAvailableEvents, useEvents } from '@state/useEvents'
+import { useSettings } from '@state/useSettings'
+import formatMoney from '@utils/money'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { useEvents, type EventType, getAvailableEvents } from '@/src/state/useEvents'
-import { formatMoney } from '@/src/components/money/MoneyHeader'
-import { useRewardedAd } from '@/src/ads/useRewardedAd'
-import { useSettings } from '@/src/state/useSettings'
 
 const rewardedAdUnitId = 'ca-app-pub-1318873164119612/8719180699'
 const MIN_REMAINING_MS_FOR_X2 = 15_000

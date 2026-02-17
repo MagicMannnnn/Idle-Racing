@@ -1,8 +1,7 @@
-import { TrackMapEditor } from '@/src/components/maps/TrackMapEditor'
-import { TrackMapEventLiveView } from '@/src/components/maps/TrackMapEventLiveView'
-import { TrackMapView } from '@/src/components/maps/TrackMapView'
-import { useTracks } from '@/src/state/useTracks'
-import { useLocalSearchParams, router } from 'expo-router'
+import { TrackMapEditor } from '@components/maps/TrackMapEditor'
+import { TrackMapEventLiveView } from '@components/maps/TrackMapEventLiveView'
+import { useTracks } from '@state/useTracks'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useMemo, useState } from 'react'
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -92,7 +91,6 @@ export default function MapTrackDetail() {
         ) : (
           <TrackMapEventLiveView
             trackId={track.id}
-            sizePx={size * 0.8}
             initialGridSize={initialGridSize}
             capacity={track.capacity}
             maxCapacity={track.maxCapacity}

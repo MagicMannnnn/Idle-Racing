@@ -1,24 +1,24 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ScrollView, StyleSheet, View, useWindowDimensions, Platform } from 'react-native'
+import { useTrackCars } from '@hooks/useTrackCars'
 import { useIsFocused } from '@react-navigation/native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-
-import { useTrackMaps } from '@/src/state/useTrackMaps'
-import { useEvents } from '@/src/state/useEvents'
+import { useEvents } from '@state/useEvents'
+import { useTrackMaps } from '@state/useTrackMaps'
 import {
-  fnv1a32,
-  mix32,
-  layoutHash,
-  toXY,
-  sign,
   addDeg,
   angleFromDelta,
   angleFromOrthSum,
   buildTrackLoop,
-} from './utils'
-import { StandIcon } from './StandIcon'
-import { useTrackCars } from './useTrackCars'
+  fnv1a32,
+  layoutHash,
+  mix32,
+  sign,
+  toXY,
+} from '@utils/map'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+
 import { CellCars } from './CellCars'
+import { StandIcon } from './StandIcon'
 import { TrackLeaderboard } from './TrackLeaderboard'
 
 type Props = {
@@ -257,7 +257,6 @@ const GridCell = React.memo(
 
 export function TrackMapEventLiveView({
   trackId,
-  sizePx = 280,
   initialGridSize = 5,
   capacity,
   maxCapacity,
@@ -334,7 +333,7 @@ export function TrackMapEventLiveView({
   // Measure render time
   useEffect(() => {
     renderCount.current++
-    const renderTime = performance.now() - renderStartTime.current
+    // const renderTime = performance.now() - renderStartTime.current
     // console.log(
     //   `[TrackMapEventLiveView] Render #${renderCount.current} took ${renderTime.toFixed(2)}ms`,
     // )

@@ -1,13 +1,12 @@
-import { useMoney } from '@/src/state/useMoney'
-import { useTracks, type UpgradeMode } from '@/src/state/useTracks'
+import TrackEvents from '@components/events/events'
 import { Ionicons } from '@expo/vector-icons'
-import { useLocalSearchParams, router } from 'expo-router'
+import { useMoney } from '@state/useMoney'
+import { type UpgradeMode, useTracks } from '@state/useTracks'
+import formatMoney from '@utils/money'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useMemo, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, Platform, ScrollView } from 'react-native'
-import TrackEvents from '@/src/components/events/events'
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { formatMoney } from '@/src/components/money/MoneyHeader'
-import { capacityLevelCost } from '@/src/state/useTracks'
 
 export default function TrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()

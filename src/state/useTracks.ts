@@ -1,5 +1,6 @@
+import { useEffect, useReducer } from 'react'
 import { Platform } from 'react-native'
-import { useReducer, useEffect } from 'react'
+
 import { useMoney } from './useMoney'
 
 const MIN_LEVEL = 1
@@ -194,12 +195,6 @@ function computeRatingPrecise(t: Track) {
   const raw = minStars + (maxStars - minStars) * score
 
   return Math.round(raw * 100) / 100
-}
-
-function modeToLevels(current: number, mode: UpgradeMode) {
-  if (mode === 'x1') return 1
-  if (mode === 'x10') return 10
-  return MAX_LEVEL - current
 }
 
 function quoteUpgrade(
