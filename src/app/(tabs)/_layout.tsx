@@ -1,6 +1,6 @@
-import Money from '@/src/components/money/MoneyHeader'
+import Money from '@components/money/MoneyHeader'
 import { Ionicons } from '@expo/vector-icons'
-import { Tabs, router } from 'expo-router'
+import { router, Tabs } from 'expo-router'
 import { Pressable } from 'react-native'
 
 function SettingsButton() {

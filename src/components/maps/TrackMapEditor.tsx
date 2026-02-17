@@ -1,7 +1,7 @@
+import type { CellType } from '@state/useTrackMaps'
+import { useTrackMaps } from '@state/useTrackMaps'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import type { CellType } from '@/src/state/useTrackMaps'
-import { useTrackMaps } from '@/src/state/useTrackMaps'
 
 type Props = {
   trackId: string

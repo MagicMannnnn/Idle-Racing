@@ -1,8 +1,8 @@
+import type { CarAnim } from '@hooks/useTrackCars'
+import { useSettings } from '@state/useSettings'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 import Animated, { useAnimatedStyle } from 'react-native-reanimated'
-import type { CarAnim } from './useTrackCars'
-import { useSettings } from '../../state/useSettings'
 
 type Props = {
   cars: CarAnim[]

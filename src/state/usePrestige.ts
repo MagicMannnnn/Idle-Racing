@@ -1,8 +1,9 @@
+import { useEffect, useReducer } from 'react'
 import { Platform } from 'react-native'
-import { useReducer, useEffect } from 'react'
-import { useTracks } from './useTracks'
-import { useMoney } from './useMoney'
+
 import { useEvents } from './useEvents'
+import { useMoney } from './useMoney'
+import { useTracks } from './useTracks'
 
 type PrestigeState = {
   knowledge: number

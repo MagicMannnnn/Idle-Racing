@@ -1,5 +1,5 @@
+import { useEffect, useReducer } from 'react'
 import { Platform } from 'react-native'
-import { useReducer, useEffect } from 'react'
 
 export type CellType = 'empty' | 'track' | 'infield' | 'stand'
 

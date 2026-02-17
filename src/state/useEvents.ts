@@ -1,8 +1,8 @@
+import { useMoney } from '@state/useMoney'
+import { usePrestige } from '@state/usePrestige'
+import { useTracks } from '@state/useTracks'
+import { useEffect, useReducer } from 'react'
 import { Platform } from 'react-native'
-import { useReducer, useEffect } from 'react'
-import { useMoney } from '@/src/state/useMoney'
-import { useTracks } from '@/src/state/useTracks'
-import { usePrestige } from '@/src/state/usePrestige'
 
 export type EventType =
   | 'open_track_day'

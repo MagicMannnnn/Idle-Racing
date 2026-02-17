@@ -1,21 +1,21 @@
-import { useOnboarding } from '@/src/state/useOnboarding'
-import { useTracks } from '@/src/state/useTracks'
-import { usePrestige } from '@/src/state/usePrestige'
 import { Ionicons } from '@expo/vector-icons'
+import { useEvents } from '@state/useEvents'
+import { useOnboarding } from '@state/useOnboarding'
+import { usePrestige } from '@state/usePrestige'
+import { useTracks } from '@state/useTracks'
+import formatMoney from '@utils/money'
 import { router } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   FlatList,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
-  View,
-  Platform,
-  Modal,
   TextInput,
+  View,
 } from 'react-native'
-import { formatMoney } from '@/src/components/money/MoneyHeader'
-import { useEvents } from '@/src/state/useEvents'
 
 function formatRating(r: number) {
   return r.toFixed(1)

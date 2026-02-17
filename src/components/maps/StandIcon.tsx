@@ -1,7 +1,7 @@
+import { mulberry32 } from '@utils/map'
 import React, { useMemo } from 'react'
 import { View } from 'react-native'
 import { StyleSheet } from 'react-native'
-import { mulberry32 } from './utils'
 
 const PALETTE = [
   '#ff595e',

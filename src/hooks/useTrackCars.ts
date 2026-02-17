@@ -1,4 +1,4 @@
-import { useSettings } from '@/src/state/useSettings'
+import { useSettings } from '@state/useSettings'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { makeMutable, type SharedValue } from 'react-native-reanimated'
 

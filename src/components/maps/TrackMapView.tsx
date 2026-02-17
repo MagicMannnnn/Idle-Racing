@@ -1,16 +1,16 @@
+import { useTrackMaps } from '@state/useTrackMaps'
+import {
+  addDeg,
+  angleFromDelta,
+  angleFromOrthSum,
+  fnv1a32,
+  layoutHash,
+  mix32,
+  sign,
+  toXY,
+} from '@utils/map'
 import React, { useEffect, useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
-import { useTrackMaps } from '@/src/state/useTrackMaps'
-import {
-  sign,
-  angleFromDelta,
-  toXY,
-  addDeg,
-  fnv1a32,
-  mix32,
-  layoutHash,
-  angleFromOrthSum,
-} from './utils'
 
 type Props = {
   trackId: string
@@ -193,13 +193,6 @@ export function TrackMapView({
     for (let i = 0; i < cells.length; i++)
       if (cells[i] === 'track') tracksAll.push(toXY(i, mapSize))
     if (tracksAll.length === 0) return map
-
-    const orth4 = [
-      { dx: 0, dy: -1 },
-      { dx: 1, dy: 0 },
-      { dx: 0, dy: 1 },
-      { dx: -1, dy: 0 },
-    ] as const
 
     for (const idx of standSet) {
       const s = toXY(idx, mapSize)

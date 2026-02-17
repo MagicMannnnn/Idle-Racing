@@ -1,9 +1,8 @@
+import { useMoney } from '@state/useMoney'
+import { useOnboarding } from '@state/useOnboarding'
 import { Stack } from 'expo-router'
-import { Pressable, Text } from 'react-native'
-import { useOnboarding } from '../state/useOnboarding'
-import { useMoney } from '../state/useMoney'
-import { useTracks } from '../state/useTracks'
 import { router } from 'expo-router'
+import { Pressable, Text } from 'react-native'
 
 // Time simulation for development/testing
 if (__DEV__) {

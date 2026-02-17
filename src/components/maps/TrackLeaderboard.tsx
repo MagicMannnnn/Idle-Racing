@@ -1,7 +1,7 @@
+import type { CarAnim } from '@hooks/useTrackCars'
+import { useTrackMaps } from '@state/useTrackMaps'
 import React, { useEffect, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import type { CarAnim } from './useTrackCars'
-import { useTrackMaps } from '@/src/state/useTrackMaps'
 
 type Row = {
   id: number
@@ -59,8 +59,6 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
       return `+${gap.toFixed(1)}`
     }
   }, [])
-
-  let prevProgress = 0
 
   return (
     <View style={[styles.card, { height }]}>
