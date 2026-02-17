@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --check",
-    "format:write": "prettier . --write"
+    "format:write": "prettier . --write",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "doctor": "expo-doctor"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
