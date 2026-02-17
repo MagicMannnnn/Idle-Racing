@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  actions: read
 
 jobs:
   qr:
@@ -15,86 +16,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install deps
-        run: npm ci --no-audit --prefer-offline
-
-      - name: Install tools
-        run: |
-          npm install -g qrcode
-          sudo apt-get update
-          sudo apt-get install -y jq
+      - name: Install QR generator
+        run: npm install -g qrcode
 
       - name: Create QR image (opens PR)
         run: |
           PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          qrcode "$PR_URL" -o preview-qr.png
+          qrcode "$PR_URL" -o pr-qr.png
 
-      # 1) Create/update the sticky comment (get comment id)
-      - name: Upsert sticky comment (placeholder)
-        id: sticky
-        uses: peter-evans/create-or-update-comment@v4
+      - name: Upload QR artifact
+        uses: actions/upload-artifact@v4
         with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body-includes: '<!-- expo-preview -->'
-          edit-mode: replace
-          body: |
-            <!-- expo-preview -->
-            ## 🔗 PR Link QR
+          name: pr-qr
+          path: pr-qr.png
+          if-no-files-found: error
 
-            📱 **Scan QR (opens this PR)**  
-            (uploading...)
-
-            ---
-            Updated automatically on every commit.
-
-      # 2) Upload the image to that comment using GitHub API (this returns a user-images URL)
-      - name: Upload image to comment
-        id: img
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          COMMENT_ID="${{ steps.sticky.outputs.comment-id }}"
-
-          # GitHub’s comment-attachment upload endpoint
-          # We POST the binary, GitHub returns JSON including a hosted URL
-          RESP=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/attachments" \
-            -f name="preview-qr.png" \
-            -f content_type="image/png" \
-            --input preview-qr.png)
-
-          URL=$(echo "$RESP" | jq -r '.browser_download_url // .url // empty')
-          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-            echo "Attachment upload response:"
-            echo "$RESP"
-            exit 1
-          fi
-
-          echo "url=$URL" >> $GITHUB_OUTPUT
-
-      # 3) Update the sticky comment with the embedded image
-      - name: Update sticky comment with embedded QR
-        uses: peter-evans/create-or-update-comment@v4
+      - name: Post sticky PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          comment-id: ${{ steps.sticky.outputs.comment-id }}
-          edit-mode: replace
-          body: |
-            <!-- expo-preview -->
-            ## 🔗 PR Link QR
+          header: expo-preview
+          message: |
+            ## 🔗 PR QR
 
-            🔗 **PR**
-            https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            **PR:** https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
 
-            📱 **Scan QR (opens this PR)**  
-            ![](${{ steps.img.outputs.url }})
+            **QR code:** Download the artifact **pr-qr** from this workflow run:
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
             ---
             Updated automatically on every commit.
