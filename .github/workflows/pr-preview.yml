@@ -40,6 +40,6 @@ jobs:
         with:
           header: pr-qr
           message: |
-            ## Preview
+            ## Branch Preview
 
             ![](https://magicmannnnn.github.io/Idle-Racing/qr/pr-${{ github.event.pull_request.number }}.png)
