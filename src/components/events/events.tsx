@@ -1,3 +1,4 @@
+import { addUnitId } from '@hooks/ads/constants'
 import { useRewardedAd } from '@hooks/ads/useRewardedAd'
 import { type EventType, getAvailableEvents, useEvents } from '@state/useEvents'
 import { useSettings } from '@state/useSettings'
@@ -5,7 +6,7 @@ import formatMoney from '@utils/money'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-const rewardedAdUnitId = 'ca-app-pub-1318873164119612/8719180699'
+const rewardedAdUnitId = addUnitId
 const MIN_REMAINING_MS_FOR_X2 = 15_000
 
 type TrackLike = {
