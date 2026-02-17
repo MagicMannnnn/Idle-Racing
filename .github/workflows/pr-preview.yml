@@ -40,12 +40,6 @@ jobs:
         with:
           header: pr-qr
           message: |
-            ## 🔗 PR QR
+            ## Preview
 
-            **PR:** https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
-
-            📱 **Scan QR (opens this PR):**
             ![](https://magicmannnnn.github.io/Idle-Racing/qr/pr-${{ github.event.pull_request.number }}.png)
-
-            ---
-            Updated automatically on every commit.
