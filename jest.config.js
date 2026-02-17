@@ -1,13 +1,21 @@
 export default {
   preset: 'jest-expo',
-
   testEnvironment: 'node',
 
-  testMatch: ['**/?(*.)+(spec|test).(ts|tsx|js)'],
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
+
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['babel-preset-expo'] }],
+  },
+
+  // ✅ IMPORTANT: allow Expo/RN packages (including expo-modules-core) to be transformed
+  transformIgnorePatterns: [
+    'node_modules/(?!(jest-expo|expo(nent)?|expo-modules-core|@expo(nent)?|@react-native|react-native|@react-navigation)/)',
+  ],
+
+  testMatch: ['**/__tests__/**/*.test.(ts|tsx|js)', '**/?(*.)+(spec|test).(ts|tsx|js)'],
 
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-
-  transformIgnorePatterns: ['node_modules/(?!(jest-expo|expo|@expo|react-native|@react-native)/)'],
 
   moduleNameMapper: {
     '^@app/(.*)$': '<rootDir>/src/app/$1',
