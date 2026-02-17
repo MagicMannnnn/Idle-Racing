@@ -362,6 +362,7 @@ if (Platform.OS === 'web') {
         setSize: (trackId: string, size: number) => {
           let nextSize = size
           if (nextSize < 3) nextSize = 3
+          if (nextSize % 2 === 0) nextSize += 1
           set((s: any) => ({
             byTrackId: { ...s.byTrackId, [trackId]: generateDefaultOval(nextSize) },
           }))
