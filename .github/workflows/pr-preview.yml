@@ -1,47 +1,51 @@
-name: PR QR (links to PR)
+name: PR QR (render in comment via Pages)
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
-  actions: read
+
+concurrency:
+  group: pr-qr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   qr:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Install QR generator
         run: npm install -g qrcode
 
       - name: Create QR image (opens PR)
         run: |
           PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          qrcode "$PR_URL" -o pr-qr.png
+          mkdir -p out/qr
+          qrcode "$PR_URL" -o "out/qr/pr-${{ github.event.pull_request.number }}.png"
 
-      - name: Upload QR artifact
-        uses: actions/upload-artifact@v4
+      # Publish to gh-pages (no checkout of main branch required)
+      - name: Publish QR to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          name: pr-qr
-          path: pr-qr.png
-          if-no-files-found: error
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: out
+          keep_files: true
 
-      - name: Post sticky PR comment
+      - name: Post sticky PR comment with embedded QR
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: expo-preview
+          header: pr-qr
           message: |
             ## 🔗 PR QR
 
             **PR:** https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
 
-            **QR code:** Download the artifact **pr-qr** from this workflow run:
-            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            📱 **Scan QR (opens this PR):**
+            ![](https://magicmannnnn.github.io/Idle-Racing/qr/pr-${{ github.event.pull_request.number }}.png)
 
             ---
             Updated automatically on every commit.
