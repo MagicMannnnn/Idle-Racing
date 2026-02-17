@@ -1,0 +1,64 @@
+name: PR Preview (Expo QR)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci --no-audit --prefer-offline
+
+      # Generate QR
+      - name: Install QR generator
+        run: npm install -g qrcode
+
+      - name: Create QR image
+        run: |
+          qrcode "https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}" -o preview-qr.png
+
+      # Upload QR to PR as attachment
+      - name: Upload QR image to GitHub
+        id: upload
+        run: |
+          RESPONSE=$(curl -s \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: image/png" \
+            --data-binary @preview-qr.png \
+            "https://uploads.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/attachments")
+
+          URL=$(echo "$RESPONSE" | jq -r '.browser_download_url')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      # QR code comment
+      - name: Post sticky PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: expo-preview
+          message: |
+            ## Preview Build
+
+            🔗 **Open**
+            ${{ steps.preview.outputs.url }}
+
+            📱 **Scan QR**
+            ![](${{ steps.upload.outputs.url }})
+
+            ---
+            Updated automatically on every commit.
