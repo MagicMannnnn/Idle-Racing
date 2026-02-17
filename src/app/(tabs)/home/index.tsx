@@ -34,17 +34,17 @@ function ratingLabel(r: number) {
 }
 
 export default function TracksIndex() {
-  const tracks = useTracks((s) => s.tracks)
-  const nextCost = useTracks((s) => s.nextTrackCost())
-  const buyNextTrack = useTracks((s) => s.buyNextTrack)
+  const tracks = useTracks((s: any) => s.tracks)
+  const nextCost = useTracks((s: any) => s.nextTrackCost())
+  const buyNextTrack = useTracks((s: any) => s.buyNextTrack)
 
-  const calculateKnowledge = usePrestige((s) => s.calculateKnowledge)
-  const prestige = usePrestige((s) => s.prestige)
-  const totalKnowledge = usePrestige((s) => s.totalKnowledge)
-  const earningsMultiplier = usePrestige((s) => s.calculateEarningsMultiplier())
+  const calculateKnowledge = usePrestige((s: any) => s.calculateKnowledge)
+  const prestige = usePrestige((s: any) => s.prestige)
+  const totalKnowledge = usePrestige((s: any) => s.totalKnowledge)
+  const earningsMultiplier = usePrestige((s: any) => s.calculateEarningsMultiplier())
 
-  const completed = useOnboarding((s) => s.completed)
-  const setStage = useOnboarding((s) => s.setStage)
+  const completed = useOnboarding((s: any) => s.completed)
+  const setStage = useOnboarding((s: any) => s.setStage)
 
   const [buyOpen, setBuyOpen] = useState(false)
   const [prestigeOpen, setPrestigeOpen] = useState(false)
@@ -62,7 +62,7 @@ export default function TracksIndex() {
 
   const avg = useMemo(() => {
     if (tracks.length === 0) return 0
-    return tracks.reduce((a, t) => a + t.rating, 0) / tracks.length
+    return tracks.reduce((a: number, t: any) => a + t.rating, 0) / tracks.length
   }, [tracks])
 
   const onOpenBuy = () => {

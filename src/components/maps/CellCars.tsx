@@ -22,7 +22,7 @@ function CarView({
   carH: number
   leaderId?: number | null
 }) {
-  const enlargedLeader = useSettings((s) => s.enlargedLeader)
+  const enlargedLeader = useSettings((s: any) => s.enlargedLeader)
   const style = useAnimatedStyle(() => ({
     position: 'absolute',
     transform: [

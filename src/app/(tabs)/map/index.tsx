@@ -91,7 +91,7 @@ export default function MapIndex() {
 
   const nextCost = useMemo(() => {
     const index = editingIndex !== null ? editingIndex : carNames?.length || 0
-    return 100 + Math.pow(index, 3) * 250
+    return 100 + Math.pow(10, index) * 250
   }, [carNames, editingIndex])
 
   //console.log(Array.from({ length: 50 }, (_, i) => 100 + Math.pow(i, 3) * 250))
@@ -220,7 +220,7 @@ export default function MapIndex() {
 
                   usedNumbers.add(displayNumber)
 
-                  const editCost = 100 + Math.pow(idx, 3) * 250
+                  const editCost = 100 + Math.pow(3, idx) * 250
                   return (
                     <View key={idx} style={styles.manageCarItem}>
                       <View style={styles.manageCarInfo}>

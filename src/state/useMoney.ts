@@ -1,18 +1,19 @@
 import { Platform } from 'react-native'
 import { useReducer, useEffect } from 'react'
+import Decimal from 'break_infinity.js'
+import { BN, clamp0, type BigNum } from '@/src/utils/bignum'
 
 type MoneyState = {
-  money: number
-  add: (amount: number) => void
-  remove: (amount: number) => void
-  spend: (amount: number) => boolean
-  canAfford: (amount: number) => boolean
-  set: (amount: number) => void
+  money: Decimal
+  add: (amount: BigNum) => void
+  remove: (amount: BigNum) => void
+  spend: (amount: BigNum) => boolean
+  canAfford: (amount: BigNum) => boolean
+  set: (amount: BigNum) => void
   reset: () => void
 }
 
-const clamp0 = (n: number) => (n < 0 ? 0 : n)
-const valid = (n: number) => Number.isFinite(n) && n >= 0
+const valid = (n: BigNum) => BN.isFinite(n) && BN.gte(n, 0)
 
 const STORAGE_KEY = 'idle.money.v1'
 
@@ -20,7 +21,7 @@ let useMoney: any
 
 // Web implementation using localStorage
 if (Platform.OS === 'web') {
-  let state = { money: 0 }
+  let state = { money: BN.zero() }
   const listeners = new Set<() => void>()
 
   const loadFromStorage = () => {
@@ -28,7 +29,7 @@ if (Platform.OS === 'web') {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
-        state.money = parsed.state?.money ?? 0
+        state.money = BN.from(parsed.state?.money ?? 0)
       }
     } catch (e) {
       console.error('Failed to load money state', e)
@@ -39,7 +40,7 @@ if (Platform.OS === 'web') {
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ state: { money: state.money }, version: 1 }),
+        JSON.stringify({ state: { money: BN.toString(state.money) }, version: 1 }),
       )
     } catch (e) {
       console.error('Failed to save money state', e)
@@ -56,33 +57,33 @@ if (Platform.OS === 'web') {
   const actions: MoneyState = {
     money: state.money,
     add: (amount) => {
-      if (!Number.isFinite(amount)) return
-      state.money = clamp0(state.money + amount)
+      if (!BN.isFinite(amount)) return
+      state.money = clamp0(BN.add(state.money, amount))
       notify()
     },
     remove: (amount) => {
-      if (!Number.isFinite(amount)) return
-      state.money = clamp0(state.money - amount)
+      if (!BN.isFinite(amount)) return
+      state.money = clamp0(BN.sub(state.money, amount))
       notify()
     },
     spend: (amount) => {
       if (!valid(amount)) return false
-      if (state.money < amount) return false
-      state.money -= amount
+      if (BN.lt(state.money, amount)) return false
+      state.money = BN.sub(state.money, amount)
       notify()
       return true
     },
     canAfford: (amount) => {
       if (!valid(amount)) return false
-      return state.money >= amount
+      return BN.gte(state.money, amount)
     },
     set: (amount) => {
-      if (!Number.isFinite(amount)) return
+      if (!BN.isFinite(amount)) return
       state.money = clamp0(amount)
       notify()
     },
     reset: () => {
-      state.money = 0
+      state.money = BN.zero()
       notify()
     },
   }
@@ -100,8 +101,8 @@ if (Platform.OS === 'web') {
   }
 
   useMoneyWeb.getState = () => ({ ...actions, money: state.money })
-  useMoneyWeb.setState = (partial: Partial<{ money: number }>) => {
-    if ('money' in partial) state.money = partial.money!
+  useMoneyWeb.setState = (partial: Partial<{ money: BigNum }>) => {
+    if ('money' in partial) state.money = BN.from(partial.money!)
     notify()
   }
 
@@ -115,41 +116,48 @@ if (Platform.OS === 'web') {
   useMoney = create()(
     persist(
       (set: any, get: any) => ({
-        money: 0,
+        money: BN.zero(),
 
-        add: (amount: number) => {
-          if (!Number.isFinite(amount)) return
-          set((s: any) => ({ money: clamp0(s.money + amount) }))
+        add: (amount: BigNum) => {
+          if (!BN.isFinite(amount)) return
+          set((s: any) => ({ money: clamp0(BN.add(s.money, amount)) }))
         },
 
-        remove: (amount: number) => {
-          if (!Number.isFinite(amount)) return
-          set((s: any) => ({ money: clamp0(s.money - amount) }))
+        remove: (amount: BigNum) => {
+          if (!BN.isFinite(amount)) return
+          set((s: any) => ({ money: clamp0(BN.sub(s.money, amount)) }))
         },
 
-        spend: (amount: number) => {
+        spend: (amount: BigNum) => {
           if (!valid(amount)) return false
           const cur = get().money
-          if (cur < amount) return false
-          set({ money: cur - amount })
+          if (BN.lt(cur, amount)) return false
+          set({ money: BN.sub(cur, amount) })
           return true
         },
 
-        canAfford: (amount: number) => {
+        canAfford: (amount: BigNum) => {
           if (!valid(amount)) return false
-          return get().money >= amount
+          return BN.gte(get().money, amount)
         },
 
-        set: (amount: number) => {
-          if (!Number.isFinite(amount)) return
+        set: (amount: BigNum) => {
+          if (!BN.isFinite(amount)) return
           set({ money: clamp0(amount) })
         },
 
-        reset: () => set({ money: 0 }),
+        reset: () => set({ money: BN.zero() }),
       }),
       {
         name: STORAGE_KEY,
-        storage: createJSONStorage(() => AsyncStorage),
+        storage: createJSONStorage(() => AsyncStorage, {
+          serialize: (state: any) =>
+            JSON.stringify({ ...state, state: { money: BN.toString(state.state.money) } }),
+          deserialize: (str: string) => {
+            const parsed = JSON.parse(str)
+            return { ...parsed, state: { money: BN.from(parsed.state.money) } }
+          },
+        }),
         version: 1,
       },
     ),

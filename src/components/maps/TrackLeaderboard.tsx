@@ -19,8 +19,8 @@ type Props = {
 
 export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
   const [rows, setRows] = useState<Row[]>([])
-  const carNames = useTrackMaps((s) => s.carNames || [])
-  const carNumbers = useTrackMaps((s) => s.carNumbers || [])
+  const carNames = useTrackMaps((s: any) => s.carNames || [])
+  const carNumbers = useTrackMaps((s: any) => s.carNumbers || [])
 
   useEffect(() => {
     let alive = true
@@ -84,7 +84,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
         {(() => {
           const usedNumbers = new Set<number>()
           let prevProgress = 0
-          
+
           return rows.map((r, idx) => {
             const carNumber = carNumbers[r.id - 1]
 
@@ -97,7 +97,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
                 displayNumber++
               }
             }
-            
+
             usedNumbers.add(displayNumber)
 
             const name = `${carNames[r.id - 1] || 'Car'} #${displayNumber}`
