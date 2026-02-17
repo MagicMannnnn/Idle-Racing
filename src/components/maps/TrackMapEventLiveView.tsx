@@ -335,9 +335,9 @@ export function TrackMapEventLiveView({
   useEffect(() => {
     renderCount.current++
     const renderTime = performance.now() - renderStartTime.current
-    console.log(
-      `[TrackMapEventLiveView] Render #${renderCount.current} took ${renderTime.toFixed(2)}ms`,
-    )
+    // console.log(
+    //   `[TrackMapEventLiveView] Render #${renderCount.current} took ${renderTime.toFixed(2)}ms`,
+    // )
     renderStartTime.current = performance.now()
   })
 

@@ -88,9 +88,9 @@ function isSingleTrackLoop(cells: CellType[], size: number) {
 }
 
 export function TrackMapEditor({ trackId, sizePx = 340, initialGridSize = 5, onSaved }: Props) {
-  const ensure = useTrackMaps((s) => s.ensure)
-  const grid = useTrackMaps((s) => s.get(trackId))
-  const setCells = useTrackMaps((s) => s.setCells)
+  const ensure = useTrackMaps((s: any) => s.ensure)
+  const grid = useTrackMaps((s: any) => s.get(trackId))
+  const setCells = useTrackMaps((s: any) => s.setCells)
 
   const [brush, setBrush] = useState<Brush>('track')
   const [draftCells, setDraftCells] = useState<CellType[]>([])

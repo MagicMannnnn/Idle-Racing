@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { use, useMemo } from 'react'
 import { View, Text, Pressable, Alert, StyleSheet, ScrollView, Platform } from 'react-native'
 import Slider from '@react-native-community/slider'
 import { router, useNavigation } from 'expo-router'
@@ -8,6 +8,7 @@ import { useTracks } from '../state/useTracks'
 import { useEvents } from '../state/useEvents'
 import { useTrackMaps } from '../state/useTrackMaps'
 import { useSettings } from '../state/useSettings'
+import { usePrestige } from '../state/usePrestige'
 
 const DEFAULT_SPEED_VARIANCE = 12
 const DEFAULT_MAX_CAR_COUNT = 20
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   const resetEvents = useEvents((s: any) => s.reset)
   const resetMaps = useTrackMaps((s: any) => s.resetAll)
   const resetSettings = useSettings((s: any) => s.reset)
+  const resetPrestige = usePrestige((s: any) => s.reset)
 
   const enlargedLeader = useSettings((s: any) => s.enlargedLeader)
   const setEnlargedLeader = useSettings((s: any) => s.setEnlargedLeader)
@@ -48,6 +50,7 @@ export default function SettingsScreen() {
     resetEvents()
     resetMaps()
     resetSettings()
+    resetPrestige()
     router.replace('/')
   }
 
