@@ -13,7 +13,9 @@
     "format": "prettier . --check",
     "format:write": "prettier . --write",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "doctor": "expo-doctor"
+    "doctor": "expo-doctor",
+    "jest": "jest",
+    "jest:watch": "jest --watch"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
