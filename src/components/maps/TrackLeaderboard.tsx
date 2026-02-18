@@ -1,7 +1,7 @@
 import type { CarAnim } from '@hooks/useTrackCars'
 import { useTrackMaps } from '@state/useTrackMaps'
 import React, { useEffect, useMemo, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 type Row = {
   id: number
@@ -14,7 +14,7 @@ type Props = {
   cars: CarAnim[]
   height?: number
   sampleMs?: number
-  setLeaderId?: (id: number) => void
+  setLeaderId?: (id: number | null) => void
 }
 
 export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
@@ -46,12 +46,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
     }
   }, [cars, sampleMs])
 
-  const leaderId = rows[0]?.id ?? null
-
-  useEffect(() => {
-    if (leaderId == null) return
-    setLeaderId?.(leaderId)
-  }, [leaderId, setLeaderId])
+  const [selectedCarId, setSelectedCarId] = useState<number | null>(null)
 
   const fmtGap = useMemo(() => {
     return (gap: number) => {
@@ -101,8 +96,22 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
             const name = `${carNames[r.id - 1] || 'Car'} #${displayNumber}`
             const gap = idx === 0 ? 0 : prevProgress - r.progress
             prevProgress = r.progress
+            const isSelected = selectedCarId === r.id
             return (
-              <View key={r.id} style={[styles.row, idx === 0 && styles.rowLeader]}>
+              <Pressable
+                key={r.id}
+                onPress={() => {
+                  const newId = isSelected ? null : r.id
+                  setSelectedCarId(newId)
+                  setLeaderId?.(newId)
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  idx === 0 && styles.rowLeader,
+                  isSelected && styles.rowSelected,
+                  pressed && styles.rowPressed,
+                ]}
+              >
                 <Text style={[styles.cell, styles.pos]}>{idx + 1}</Text>
 
                 <View style={styles.nameWrap}>
@@ -112,7 +121,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
 
                 <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>
                 <Text style={[styles.cell, styles.gap]}>{idx === 0 ? '—' : fmtGap(gap)}</Text>
-              </View>
+              </Pressable>
             )
           })
         })()}
@@ -167,6 +176,14 @@ const styles = StyleSheet.create({
   },
   rowLeader: {
     backgroundColor: 'rgba(255,255,255,0.75)',
+  },
+  rowSelected: {
+    backgroundColor: 'rgba(59, 130, 246, 0.25)',
+    borderWidth: 2,
+    borderColor: 'rgba(59, 130, 246, 0.6)',
+  },
+  rowPressed: {
+    opacity: 0.7,
   },
 
   cell: { fontSize: 13 },

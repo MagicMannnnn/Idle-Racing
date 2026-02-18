@@ -185,10 +185,7 @@ function computeRatingPrecise(t: Track) {
   const safN = clamp01((t.safety - 1) / 5)
   const entN = clamp01((t.entertainment - 5) / 100)
 
-  const score = Math.max(
-    capN * 0.3 + safN * 0.25 + entN * 0.45,
-    capN * 0.45 + safN * 0.25 + entN * 0.3,
-  )
+  const score = (capN + entN) * 0.75 + safN * 0.25
 
   const maxStars = trackMaxStars(t.index)
   const minStars = 1.0

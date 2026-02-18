@@ -3,17 +3,12 @@ import { TrackMapEventLiveView } from '@components/maps/TrackMapEventLiveView'
 import { useTracks } from '@state/useTracks'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useMemo, useState } from 'react'
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function MapTrackDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const track = useTracks((s: any) => s.tracks.find((t: any) => t.id === id))
-
-  const size =
-    Dimensions.get('window').width > Dimensions.get('window').height
-      ? Dimensions.get('window').width / 2 - 32
-      : Dimensions.get('window').width - 32
 
   const [isEditing, setIsEditing] = useState(false)
 
@@ -48,11 +43,7 @@ export default function MapTrackDetail() {
         <View style={styles.headerTopRow}>
           <Pressable
             onPress={() => {
-              if (router.canGoBack()) {
-                router.back()
-              } else {
-                router.replace('/(tabs)/map')
-              }
+              router.replace('/(tabs)/map')
             }}
             style={styles.backButton}
             hitSlop={10}
@@ -84,7 +75,6 @@ export default function MapTrackDetail() {
         {isEditing ? (
           <TrackMapEditor
             trackId={track.id}
-            sizePx={size * 0.8}
             initialGridSize={initialGridSize}
             onSaved={() => setIsEditing(false)}
           />

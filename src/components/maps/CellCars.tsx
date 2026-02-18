@@ -23,20 +23,31 @@ function CarView({
   leaderId?: number | null
 }) {
   const enlargedLeader = useSettings((s: any) => s.enlargedLeader)
+  const isSelected = car.id === leaderId
   const style = useAnimatedStyle(() => ({
     position: 'absolute',
     transform: [
       { translateX: car.x.value - carW / 2 },
       { translateY: car.y.value - carH / 2 },
       { rotate: `${car.rotDeg.value}deg` },
-      { scale: car.id === leaderId ? (enlargedLeader ? 1.3 : 1) : 1 },
+      { scale: isSelected ? (enlargedLeader ? 1.3 : 1) : 1 },
     ],
   }))
 
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.car, { width: carW, height: carH, backgroundColor: car.colorHex }, style]}
+      style={[
+        styles.car,
+        {
+          width: carW,
+          height: carH,
+          backgroundColor: car.colorHex,
+          borderWidth: isSelected ? 2 : 0,
+          borderColor: isSelected ? '#FFFFFF' : 'transparent',
+        },
+        style,
+      ]}
     />
   )
 }
