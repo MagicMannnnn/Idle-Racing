@@ -41,5 +41,5 @@ jobs:
           header: pr-qr
           message: |
             ## Branch Preview
-
+            https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
             ![](https://magicmannnnn.github.io/Idle-Racing/qr/pr-${{ github.event.pull_request.number }}.png)
