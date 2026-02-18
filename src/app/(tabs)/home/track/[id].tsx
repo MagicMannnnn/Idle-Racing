@@ -47,11 +47,7 @@ export default function TrackDetail() {
       <View style={styles.headerWrap}>
         <Pressable
           onPress={() => {
-            if (router.canGoBack()) {
-              router.back()
-            } else {
-              router.replace('/(tabs)/home')
-            }
+            router.replace('/(tabs)/home')
           }}
           style={styles.backButton}
           hitSlop={10}
