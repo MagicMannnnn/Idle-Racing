@@ -60,6 +60,7 @@ jobs:
           destination_dir: PRs/${{ github.event.pull_request.number }}
           keep_files: true
           enable_jekyll: false
+          exclude_assets: .*
 
       - name: Preview URL
         run: |
