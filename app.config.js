@@ -1,25 +1,15 @@
-export default ({ config }) => {
-  const repo = process.env.EXPO_PUBLIC_REPO_NAME || 'Idle-Racing'
-  const pr = process.env.EXPO_PUBLIC_PR_NUMBER // undefined locally
-
-  // For PR previews: /<repo>/PRs/<number>
-  // For non-PR builds (local/dev), keep it root.
-  const baseUrl = pr ? `/${repo}/PRs/${pr}` : '/'
+module.exports = ({ config }) => {
+  const repoName = process.env.EXPO_PUBLIC_REPO_NAME || 'Idle-Racing'
+  const prNumber = process.env.EXPO_PUBLIC_PR_NUMBER
+  const baseUrl = prNumber ? `/${repoName}/PRs/${prNumber}/` : `/${repoName}/`
 
   return {
     ...config,
-
-    // Ensure static output for hosting on GitHub Pages
     web: {
-      ...(config.web ?? {}),
-      output: 'static',
+      ...config.web,
       bundler: 'metro',
-    },
-
-    // GitHub Pages support uses this experimental baseUrl
-    experiments: {
-      ...(config.experiments ?? {}),
-      baseUrl,
+      output: 'static',
+      baseUrl: baseUrl,
     },
   }
 }
