@@ -36,12 +36,12 @@ module.exports = ({ config }) => {
       favicon: './assets/icon.png',
       output: 'static',
       bundler: 'metro',
-      baseUrl: baseUrl,
     },
     experiments: {
       ...(config.experiments ?? {}),
       baseUrl,
     },
+    assetBundlePatterns: ['**/*'],
     plugins: [
       'expo-router',
       [

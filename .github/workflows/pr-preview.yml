@@ -35,6 +35,13 @@ jobs:
           npx expo export --platform web --output-dir dist
           echo "=== sanity: Ionicons exists in dist ==="
           find dist -type f \( -name "*Ionicons*.ttf" -o -name "*Ionicons*.woff*" -o -name "*Ionicons*.woff2" \) -print || true
+          echo "=== _expo directory contents ==="
+          ls -la dist/_expo/ || echo "No _expo directory found"
+          echo "=== Inject base tag into index.html ==="
+          BASE_PATH="/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}/"
+          sed -i "s|<head>|<head><base href=\"${BASE_PATH}\">|" dist/index.html
+          echo "=== Create 404.html for SPA routing ==="
+          cp dist/index.html dist/404.html
 
       - name: Deploy dist to gh-pages/PRs/<number>
         env:
