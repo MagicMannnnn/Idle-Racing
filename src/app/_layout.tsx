@@ -2,10 +2,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { useMoney } from '@state/useMoney'
 import { useOnboarding } from '@state/useOnboarding'
 import { useFonts } from 'expo-font'
-import { SplashScreen, Stack } from 'expo-router'
-import { router } from 'expo-router'
+import { router, SplashScreen, Stack } from 'expo-router'
 import { useEffect } from 'react'
 import { Pressable, Text } from 'react-native'
+
 // Time simulation for development/testing
 if (__DEV__) {
   ;(global as any).simulateTime = (hoursAhead: number) => {
@@ -30,33 +30,31 @@ if (__DEV__) {
   }
 }
 
+SplashScreen.preventAutoHideAsync()
+
 export default function RootLayout() {
   const hasHydrated = useOnboarding((s: any) => s.hasHydrated)
-  if (!hasHydrated) {
-    return null
-  }
   const completed = useOnboarding((s: any) => s.completed)
   const stage = useOnboarding((s: any) => s.stage)
   const set = useMoney((s: any) => s.set)
 
-  useEffect(() => {
-    if (!completed && stage === 0) set(250)
-  }, [completed, stage, set])
-
-  const [loaded] = useFonts({
+  const [fontsLoaded] = useFonts({
     ...Ionicons.font,
   })
 
   useEffect(() => {
-    if (loaded) SplashScreen.hideAsync()
-  }, [loaded])
+    if (hasHydrated && !completed && stage === 0) set(250)
+  }, [hasHydrated, completed, stage, set])
 
-  if (!loaded) return null
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync()
+  }, [fontsLoaded])
+
+  if (!hasHydrated || !fontsLoaded) return null
 
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
       <Stack.Screen
         name="settings"
         options={{
@@ -66,11 +64,8 @@ export default function RootLayout() {
           headerLeft: () => (
             <Pressable
               onPress={() => {
-                if (router.canGoBack()) {
-                  router.back()
-                } else {
-                  router.replace('/home')
-                }
+                if (router.canGoBack()) router.back()
+                else router.replace('/home')
               }}
               style={{ paddingHorizontal: 16 }}
               hitSlop={10}
@@ -82,8 +77,7 @@ export default function RootLayout() {
           ),
         }}
       />
-
-      <Stack.Screen name="not-found" options={{ title: 'Not Found' }} />
+      <Stack.Screen name="not-found" />
     </Stack>
   )
 }
