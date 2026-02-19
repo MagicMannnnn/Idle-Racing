@@ -13,6 +13,7 @@ export default ({ config }) => {
     web: {
       ...(config.web ?? {}),
       output: 'static',
+      bundler: 'metro',
     },
 
     // GitHub Pages support uses this experimental baseUrl
