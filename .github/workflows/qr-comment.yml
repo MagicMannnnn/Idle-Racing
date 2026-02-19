@@ -1,0 +1,46 @@
+name: PR QR (render in comment via Pages)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-qr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  qr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install QR generator
+        run: npm install -g qrcode
+
+      - name: Create QR image (opens PR)
+        run: |
+          PR_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}/"
+          mkdir -p out/qr
+          qrcode "$PR_URL" -o "out/qr/pr-${{ github.event.pull_request.number }}.png"
+
+      # Publish to gh-pages (no checkout of main branch required)
+      - name: Publish QR to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: out
+          keep_files: true
+          enable_jekyll: false
+
+      - name: Post sticky PR comment with embedded QR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-qr
+          message: |
+            ## Branch Preview
+            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}/
+            ![](https://magicmannnnn.github.io/Idle-Racing/qr/pr-${{ github.event.pull_request.number }}.png)
