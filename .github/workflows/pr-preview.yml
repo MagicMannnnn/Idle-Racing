@@ -1,4 +1,4 @@
-name: PR QR (render in comment via Pages)
+name: PR Web Preview (Expo Router -> Pages)
 
 on:
   pull_request:
@@ -6,40 +6,44 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
-  group: pr-qr-${{ github.event.pull_request.number }}
+  group: pr-web-preview-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  qr:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Install QR generator
-        run: npm install -g qrcode
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Create QR image (opens PR)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Export web (static)
+        env:
+          # Used by app.config.js to set experiments.baseUrl
+          EXPO_PUBLIC_REPO_NAME: ${{ github.event.repository.name }}
+          EXPO_PUBLIC_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          mkdir -p out/qr
-          qrcode "$PR_URL" -o "out/qr/pr-${{ github.event.pull_request.number }}.png"
+          npx expo export --platform web --output-dir dist
 
-      # Publish to gh-pages (no checkout of main branch required)
-      - name: Publish QR to gh-pages
+      - name: Publish to gh-pages under PRs/<number>
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: out
+          publish_dir: ./dist
+          destination_dir: PRs/${{ github.event.pull_request.number }}
           keep_files: true
 
-      - name: Post sticky PR comment with embedded QR
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: pr-qr
-          message: |
-            ## Branch Preview
-            https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
-            ![](https://magicmannnnn.github.io/Idle-Racing/qr/pr-${{ github.event.pull_request.number }}.png)
+      - name: Preview URL
+        run: |
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}/"
