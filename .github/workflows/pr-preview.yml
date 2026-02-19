@@ -41,6 +41,16 @@ jobs:
         run: |
           npx expo export --platform web --output-dir dist
 
+      - name: Debug dist tree
+        run: |
+          echo "=== dist root ==="
+          ls -la dist
+          echo "=== does dist/PRs exist (should not yet) ==="
+          ls -la dist/PRs || true
+          echo "=== find assets + ionicons ==="
+          find dist -maxdepth 4 -type d -name assets -print || true
+          find dist -type f \( -name "*Ionicons*.ttf" -o -name "*Ionicons*.woff*" -o -name "*Ionicons*.woff2" \) -print || true
+
       - name: Publish to gh-pages under PRs/<number>
         uses: peaceiris/actions-gh-pages@v4
         with:
