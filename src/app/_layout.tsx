@@ -1,9 +1,11 @@
+import { Ionicons } from '@expo/vector-icons'
 import { useMoney } from '@state/useMoney'
 import { useOnboarding } from '@state/useOnboarding'
-import { Stack } from 'expo-router'
+import { useFonts } from 'expo-font'
+import { SplashScreen, Stack } from 'expo-router'
 import { router } from 'expo-router'
+import { useEffect } from 'react'
 import { Pressable, Text } from 'react-native'
-
 // Time simulation for development/testing
 if (__DEV__) {
   ;(global as any).simulateTime = (hoursAhead: number) => {
@@ -42,6 +44,16 @@ export default function RootLayout() {
       set(250)
     }
   }
+
+  const [loaded] = useFonts({
+    ...Ionicons.font,
+  })
+
+  useEffect(() => {
+    if (loaded) SplashScreen.hideAsync()
+  }, [loaded])
+
+  if (!loaded) return null
 
   return (
     <Stack>
