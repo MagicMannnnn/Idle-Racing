@@ -38,6 +38,10 @@ module.exports = ({ config }) => {
       bundler: 'metro',
       baseUrl: baseUrl,
     },
+    experiments: {
+      ...(config.experiments ?? {}),
+      baseUrl,
+    },
     plugins: [
       'expo-router',
       [
