@@ -42,6 +42,27 @@ jobs:
           # IMPORTANT: do NOT set EXPO_PUBLIC_PR_NUMBER
         run: |
           npx expo export --platform web --output-dir dist
+          echo "=== sanity: Ionicons exists in dist ==="
+          find dist -type f \( -name "*Ionicons*.ttf" -o -name "*Ionicons*.woff*" -o -name "*Ionicons*.woff2" \) -print || true
+          echo "=== _expo directory contents ==="
+          ls -la dist/_expo/ || echo "No _expo directory found"
+
+          # GitHub Pages blocks node_modules, so move fonts to a safe directory
+          echo "=== Moving fonts out of node_modules path ==="
+          mkdir -p dist/_fonts
+          find dist/assets -name "*.ttf" -o -name "*.woff" -o -name "*.woff2" | while read fontfile; do
+            cp "$fontfile" "dist/_fonts/$(basename "$fontfile")"
+          done
+          ls -la dist/_fonts/ || true
+
+          # Update index.html to reference new font paths
+          echo "=== Updating font references in HTML ==="
+          BASE_PATH="/${{ github.event.repository.name }}/main"
+          sed -i "s|${BASE_PATH}/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/|${BASE_PATH}/_fonts/|g" dist/index.html
+
+          # Copy index.html as 404.html for SPA routing
+          echo "=== Creating 404.html for SPA routing ==="
+          cp dist/index.html dist/404.html
 
       # Clone gh-pages
       - name: Clone gh-pages
@@ -62,6 +83,47 @@ jobs:
 
           # Ensure GitHub Pages serves _expo/
           touch ghpages/.nojekyll
+
+          # Create .gitignore that allows everything
+          echo "# Allow all files for GitHub Pages" > ghpages/.gitignore
+          echo "!*" >> ghpages/.gitignore
+
+          # Create root-level 404.html for SPA routing (GitHub Pages only checks root)
+          cat > ghpages/404.html << 'ROOTEOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Redirecting...</title>
+            <script>
+              // GitHub Pages serves this 404.html for any missing page
+              // Redirect to the appropriate index.html to let the SPA handle routing
+              var path = window.location.pathname;
+              var prMatch = path.match(/^\/([^\/]+)\/PRs\/(\d+)\//);
+              var mainMatch = path.match(/^\/([^\/]+)\/main\//);
+              
+              if (prMatch) {
+                // If it's a PR preview path, redirect to that PR's index.html
+                var repoName = prMatch[1];
+                var prNumber = prMatch[2];
+                var basePath = '/' + repoName + '/PRs/' + prNumber + '/';
+                window.location.replace(basePath);
+              } else if (mainMatch) {
+                // If it's a main path, redirect to main index.html
+                var repoName = mainMatch[1];
+                var basePath = '/' + repoName + '/main/';
+                window.location.replace(basePath);
+              } else {
+                // Otherwise, go to repo root
+                window.location.replace('/');
+              }
+            </script>
+          </head>
+          <body>
+            <p>Redirecting...</p>
+          </body>
+          </html>
+          ROOTEOF
 
       # Delete PR previews that are not open
       - name: Cleanup stale PR previews
@@ -105,6 +167,12 @@ jobs:
           mkdir -p ghpages/main
           cp -R dist/* ghpages/main/
 
+          # Debug: List what was copied
+          echo "=== Files in ghpages/main ==="
+          ls -la ghpages/main || true
+          echo "=== Checking for Ionicons font ==="
+          find ghpages/main -name "*Ionicons*.ttf" || true
+
       # Commit + push
       - name: Commit + push gh-pages
         run: |
@@ -116,3 +184,7 @@ jobs:
           git add -A
           git commit -m "Pages: cleanup PR previews + deploy main to /main" || echo "No changes to commit"
           git push origin gh-pages
+
+      - name: Main site URL
+        run: |
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/main/"
