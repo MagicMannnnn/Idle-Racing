@@ -5,15 +5,21 @@
   <title>Redirecting...</title>
   <script>
     // GitHub Pages serves this 404.html for any missing page
-    // Redirect to the PR preview's index.html to let the SPA handle routing
+    // Redirect to the appropriate index.html to let the SPA handle routing
     var path = window.location.pathname;
     var prMatch = path.match(/^\/([^\/]+)\/PRs\/(\d+)\//);
+    var mainMatch = path.match(/^\/([^\/]+)\/main\//);
     
     if (prMatch) {
       // If it's a PR preview path, redirect to that PR's index.html
       var repoName = prMatch[1];
       var prNumber = prMatch[2];
       var basePath = '/' + repoName + '/PRs/' + prNumber + '/';
+      window.location.replace(basePath);
+    } else if (mainMatch) {
+      // If it's a main path, redirect to main index.html
+      var repoName = mainMatch[1];
+      var basePath = '/' + repoName + '/main/';
       window.location.replace(basePath);
     } else {
       // Otherwise, go to repo root
