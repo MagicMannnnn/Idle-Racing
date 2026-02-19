@@ -43,6 +43,7 @@ jobs:
           publish_dir: ./dist
           destination_dir: PRs/${{ github.event.pull_request.number }}
           keep_files: true
+          enable_jekyll: false
 
       - name: Preview URL
         run: |
