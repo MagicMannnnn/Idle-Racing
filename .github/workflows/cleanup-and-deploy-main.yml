@@ -1,0 +1,118 @@
+name: Pages - Cleanup PR previews + Deploy Main (/main)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: pages-maintenance
+  cancel-in-progress: true
+
+jobs:
+  cleanup_and_deploy:
+    # Run manually OR when PR is closed AND merged
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # Build main web export
+      - name: Export web (main)
+        env:
+          EXPO_PUBLIC_REPO_NAME: ${{ github.event.repository.name }}
+          # IMPORTANT: do NOT set EXPO_PUBLIC_PR_NUMBER
+        run: |
+          npx expo export --platform web --output-dir dist
+
+      # Clone gh-pages
+      - name: Clone gh-pages
+        run: |
+          set -euo pipefail
+
+          rm -rf ghpages
+          git clone --depth=1 --single-branch --branch gh-pages \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            ghpages || true
+
+          if [ ! -d "ghpages/.git" ]; then
+            mkdir -p ghpages
+            (cd ghpages && git init)
+            (cd ghpages && git checkout -b gh-pages)
+            (cd ghpages && git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git")
+          fi
+
+          # Ensure GitHub Pages serves _expo/
+          touch ghpages/.nojekyll
+
+      # Delete PR previews that are not open
+      - name: Cleanup stale PR previews
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          OPEN_PRS="$(gh api "repos/${OWNER}/${REPO}/pulls?state=open&per_page=100" --jq '.[].number' | tr '\n' ' ')"
+          echo "Open PRs: ${OPEN_PRS:-<none>}"
+
+          mkdir -p ghpages/PRs
+
+          for dir in ghpages/PRs/*; do
+            [ -d "$dir" ] || continue
+            n="$(basename "$dir")"
+
+            keep="false"
+            for open in $OPEN_PRS; do
+              if [ "$open" = "$n" ]; then
+                keep="true"
+                break
+              fi
+            done
+
+            if [ "$keep" != "true" ]; then
+              echo "Deleting PR preview: PRs/$n"
+              rm -rf "$dir"
+            fi
+          done
+
+      # Deploy main build to /main
+      - name: Deploy main site to /main
+        run: |
+          set -euo pipefail
+
+          rm -rf ghpages/main
+          mkdir -p ghpages/main
+          cp -R dist/* ghpages/main/
+
+      # Commit + push
+      - name: Commit + push gh-pages
+        run: |
+          set -euo pipefail
+          cd ghpages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "Pages: cleanup PR previews + deploy main to /main" || echo "No changes to commit"
+          git push origin gh-pages
