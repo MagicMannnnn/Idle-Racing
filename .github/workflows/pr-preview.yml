@@ -15,7 +15,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@v4
 
       - name: Setup Node
@@ -27,60 +27,51 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Clear existing PR folder on gh-pages
-        run: |
-          git fetch origin gh-pages || true
-          git checkout gh-pages || git checkout --orphan gh-pages
-          rm -rf PRs/${{ github.event.pull_request.number }} || true
-
       - name: Export web (static)
         env:
-          # Used by app.config.js to set experiments.baseUrl
           EXPO_PUBLIC_REPO_NAME: ${{ github.event.repository.name }}
           EXPO_PUBLIC_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           npx expo export --platform web --output-dir dist
-
-      - name: Debug dist tree
-        run: |
-          echo "=== dist root ==="
-          ls -la dist
-          echo "=== does dist/PRs exist (should not yet) ==="
-          ls -la dist/PRs || true
-          echo "=== find assets + ionicons ==="
-          find dist -maxdepth 4 -type d -name assets -print || true
+          echo "=== sanity: Ionicons exists in dist ==="
           find dist -type f \( -name "*Ionicons*.ttf" -o -name "*Ionicons*.woff*" -o -name "*Ionicons*.woff2" \) -print || true
 
-      - name: Deploy PR preview to gh-pages/PRs/<number>
+      - name: Deploy dist to gh-pages/PRs/<number>
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -e
+          set -euo pipefail
 
-          PR="PRs/${{ github.event.pull_request.number }}"
+          PR_DIR="PRs/${PR_NUMBER}"
 
+          # Clone gh-pages into a separate folder
+          git clone --depth=1 --single-branch --branch gh-pages \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            ghpages || true
+
+          # If gh-pages doesn't exist yet, create a fresh repo folder
+          if [ ! -d "ghpages/.git" ]; then
+            mkdir -p ghpages
+            (cd ghpages && git init)
+            (cd ghpages && git checkout -b gh-pages)
+            (cd ghpages && git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git")
+          fi
+
+          # Ensure Pages doesn't run Jekyll (needed for _expo)
+          touch ghpages/.nojekyll
+
+          # Replace just this PR folder
+          rm -rf "ghpages/${PR_DIR}"
+          mkdir -p "ghpages/${PR_DIR}"
+          cp -R dist/* "ghpages/${PR_DIR}/"
+
+          # Commit + push
+          cd ghpages
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Fetch gh-pages branch
-          git fetch origin gh-pages || true
-
-          # Create or checkout gh-pages
-          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
-            git checkout -B gh-pages origin/gh-pages
-          else
-            git checkout --orphan gh-pages
-            git rm -rf . || true
-          fi
-
-          # Ensure Pages does not run Jekyll (needed for _expo)
-          touch .nojekyll
-
-          # Replace just this PR folder
-          rm -rf "$PR"
-          mkdir -p "$PR"
-          cp -R dist/* "$PR/"
-
           git add -A
-          git commit -m "Deploy web preview for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git commit -m "Deploy web preview for PR #${PR_NUMBER}" || echo "No changes to commit"
           git push origin gh-pages
 
       - name: Preview URL
