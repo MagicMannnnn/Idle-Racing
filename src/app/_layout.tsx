@@ -50,8 +50,6 @@ export default function RootLayout() {
     if (fontsLoaded) SplashScreen.hideAsync()
   }, [fontsLoaded])
 
-  console.log('RootLayout render', { hasHydrated, completed, stage, fontsLoaded })
-
   if (!hasHydrated || !fontsLoaded) return null
 
   return (
