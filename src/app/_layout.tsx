@@ -39,11 +39,9 @@ export default function RootLayout() {
   const stage = useOnboarding((s: any) => s.stage)
   const set = useMoney((s: any) => s.set)
 
-  if (!completed) {
-    if (stage === 0) {
-      set(250)
-    }
-  }
+  useEffect(() => {
+    if (!completed && stage === 0) set(250)
+  }, [completed, stage, set])
 
   const [loaded] = useFonts({
     ...Ionicons.font,
@@ -84,6 +82,8 @@ export default function RootLayout() {
           ),
         }}
       />
+
+      <Stack.Screen name="not-found" options={{ title: 'Not Found' }} />
     </Stack>
   )
 }

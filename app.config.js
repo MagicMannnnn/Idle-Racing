@@ -4,7 +4,7 @@ export default ({ config }) => {
 
   // For PR previews: /<repo>/PRs/<number>
   // For non-PR builds (local/dev), keep it root.
-  const baseUrl = pr ? `/${repo}/PRs/${pr}` : ''
+  const baseUrl = pr ? `/${repo}/PRs/${pr}` : '/'
 
   return {
     ...config,
