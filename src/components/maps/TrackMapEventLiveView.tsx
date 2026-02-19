@@ -635,60 +635,68 @@ export function TrackMapEventLiveView({
   }, [cells, mapSize, trackKerbsByIndex])
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={isWeb ? ['top', 'left', 'right', 'bottom'] : []}>
       {isWeb ? (
-        <View
-          style={{
-            flex: 1,
-            flexDirection: isLandscape ? 'row' : 'column',
-            alignSelf: 'center',
-            gap: 12,
-            alignItems: isLandscape ? 'flex-start' : 'center',
-            justifyContent: 'center',
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingVertical: isLandscape ? 24 : 12,
             paddingHorizontal: 12,
-            paddingVertical: 24,
           }}
+          showsVerticalScrollIndicator={!isLandscape}
         >
-          <View style={{ width: wrapW, alignSelf: 'center' }}>
-            <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
-              {Array.from({ length: mapSize * mapSize }).map((_, i) => {
-                const type = cells[i] ?? 'empty'
-                const showStand = type === 'empty' && standSet.has(i)
-                const standRotation = showStand
-                  ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
-                  : '0deg'
-                const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
-                const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
+          <View
+            style={{
+              flex: isLandscape ? 1 : undefined,
+              flexDirection: isLandscape ? 'row' : 'column',
+              alignSelf: 'center',
+              gap: 12,
+              alignItems: isLandscape ? 'flex-start' : 'center',
+              justifyContent: isLandscape ? 'center' : 'flex-start',
+            }}
+          >
+            <View style={{ width: wrapW, alignSelf: 'center' }}>
+              <View style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}>
+                {Array.from({ length: mapSize * mapSize }).map((_, i) => {
+                  const type = cells[i] ?? 'empty'
+                  const showStand = type === 'empty' && standSet.has(i)
+                  const standRotation = showStand
+                    ? addDeg(standFacingByIndex.get(i) ?? '0deg', 180)
+                    : '0deg'
+                  const trackKerb = type === 'track' ? trackKerbsByIndex.get(i) : undefined
+                  const innerCorners = type !== 'track' ? innerCornersByIndex.get(i) : undefined
 
-                return (
-                  <GridCell
-                    key={`${trackId}_${i}`}
-                    trackId={trackId}
-                    index={i}
-                    cellPx={cellPx}
-                    mapSize={mapSize}
-                    type={type}
-                    firstTrackIdx={firstTrackIdx}
-                    trackKerb={trackKerb}
-                    innerCorners={innerCorners}
-                    showStand={showStand}
-                    standRotation={standRotation}
-                    standSeed={fnv1a32(trackId + i)}
-                    entertainmentValue={entertainmentValue}
-                  />
-                )
-              })}
+                  return (
+                    <GridCell
+                      key={`${trackId}_${i}`}
+                      trackId={trackId}
+                      index={i}
+                      cellPx={cellPx}
+                      mapSize={mapSize}
+                      type={type}
+                      firstTrackIdx={firstTrackIdx}
+                      trackKerb={trackKerb}
+                      innerCorners={innerCorners}
+                      showStand={showStand}
+                      standRotation={standRotation}
+                      standSeed={fnv1a32(trackId + i)}
+                      entertainmentValue={entertainmentValue}
+                    />
+                  )
+                })}
 
-              {showCarsVisual ? (
-                <CellCars cars={cars} carW={cellPx / 6} carH={cellPx / 4} leaderId={leaderId} />
-              ) : null}
+                {showCarsVisual ? (
+                  <CellCars cars={cars} carW={cellPx / 6} carH={cellPx / 4} leaderId={leaderId} />
+                ) : null}
+              </View>
+            </View>
+
+            <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
+              <TrackLeaderboard cars={cars} height={leaderboardHeight} setLeaderId={setLeaderId} />
             </View>
           </View>
-
-          <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
-            <TrackLeaderboard cars={cars} height={leaderboardHeight} setLeaderId={setLeaderId} />
-          </View>
-        </View>
+        </ScrollView>
       ) : (
         <ScrollView
           style={styles.scroll}
@@ -756,8 +764,8 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 6,
-    paddingBottom: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
 
   wrap: {
