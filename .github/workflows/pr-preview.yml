@@ -37,10 +37,19 @@ jobs:
           find dist -type f \( -name "*Ionicons*.ttf" -o -name "*Ionicons*.woff*" -o -name "*Ionicons*.woff2" \) -print || true
           echo "=== _expo directory contents ==="
           ls -la dist/_expo/ || echo "No _expo directory found"
-          echo "=== Inject base tag into index.html ==="
-          BASE_PATH="/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}/"
-          sed -i "s|<head>|<head><base href=\"${BASE_PATH}\">|" dist/index.html
-          echo "=== Create 404.html for SPA routing ==="
+
+          # GitHub Pages blocks node_modules, so move fonts to a safe directory
+          echo "=== Moving fonts out of node_modules path ==="
+          mkdir -p dist/_fonts
+          find dist/assets -name "*.ttf" -o -name "*.woff" -o -name "*.woff2" | while read fontfile; do
+            cp "$fontfile" "dist/_fonts/$(basename "$fontfile")"
+          done
+          ls -la dist/_fonts/ || true
+
+          # Update index.html to reference new font paths
+          echo "=== Updating font references in HTML ==="
+          BASE_PATH="/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}"
+          sed -i "s|${BASE_PATH}/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/|${BASE_PATH}/_fonts/|g" dist/index.html
           cp dist/index.html dist/404.html
 
       - name: Deploy dist to gh-pages/PRs/<number>
@@ -71,6 +80,16 @@ jobs:
           rm -rf "ghpages/${PR_DIR}"
           mkdir -p "ghpages/${PR_DIR}"
           cp -R dist/* "ghpages/${PR_DIR}/"
+
+          # Debug: List what was copied
+          echo "=== Files in ghpages/${PR_DIR} ==="
+          ls -la "ghpages/${PR_DIR}" || true
+          echo "=== Checking for Ionicons font ==="
+          find "ghpages/${PR_DIR}" -name "*Ionicons*.ttf" || true
+
+          # Create .gitignore that allows everything
+          echo "# Allow all files for GitHub Pages" > ghpages/.gitignore
+          echo "!*" >> ghpages/.gitignore
 
           # Commit + push
           cd ghpages
