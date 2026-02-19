@@ -50,7 +50,30 @@ jobs:
           echo "=== Updating font references in HTML ==="
           BASE_PATH="/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}"
           sed -i "s|${BASE_PATH}/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/|${BASE_PATH}/_fonts/|g" dist/index.html
-          cp dist/index.html dist/404.html
+
+          # Create 404.html that redirects to home
+          echo "=== Creating 404.html that redirects to home ==="
+          cat > dist/404.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Redirecting...</title>
+            <script>
+              // Redirect to the base path (home)
+              var basePath = window.location.pathname.match(/^\/[^\/]+\/PRs\/\d+\//);
+              if (basePath) {
+                window.location.replace(basePath[0]);
+              } else {
+                window.location.replace('/');
+              }
+            </script>
+          </head>
+          <body>
+            <p>Redirecting to home...</p>
+          </body>
+          </html>
+          EOF
 
       - name: Deploy dist to gh-pages/PRs/<number>
         env:
