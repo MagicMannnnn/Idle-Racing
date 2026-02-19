@@ -39,7 +39,7 @@ jobs:
       - name: Export web (main)
         env:
           EXPO_PUBLIC_REPO_NAME: ${{ github.event.repository.name }}
-          # IMPORTANT: do NOT set EXPO_PUBLIC_PR_NUMBER
+          EXPO_PUBLIC_DEPLOY_MAIN: 'true'
         run: |
           npx expo export --platform web --output-dir dist
           echo "=== sanity: Ionicons exists in dist ==="

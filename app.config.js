@@ -1,7 +1,16 @@
 module.exports = ({ config }) => {
   const repoName = process.env.EXPO_PUBLIC_REPO_NAME || 'Idle-Racing'
   const prNumber = process.env.EXPO_PUBLIC_PR_NUMBER
-  const baseUrl = prNumber ? `/${repoName}/PRs/${prNumber}/` : `/${repoName}/`
+  const isMainDeploy = process.env.EXPO_PUBLIC_DEPLOY_MAIN === 'true'
+
+  let baseUrl
+  if (prNumber) {
+    baseUrl = `/${repoName}/PRs/${prNumber}/`
+  } else if (isMainDeploy) {
+    baseUrl = `/${repoName}/main/`
+  } else {
+    baseUrl = `/${repoName}/`
+  }
 
   return {
     name: 'Idle Racing',
