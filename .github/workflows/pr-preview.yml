@@ -27,6 +27,12 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Clear existing PR folder on gh-pages
+        run: |
+          git fetch origin gh-pages || true
+          git checkout gh-pages || git checkout --orphan gh-pages
+          rm -rf PRs/${{ github.event.pull_request.number }} || true
+
       - name: Export web (static)
         env:
           # Used by app.config.js to set experiments.baseUrl
