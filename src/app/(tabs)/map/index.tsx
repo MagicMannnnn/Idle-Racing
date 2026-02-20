@@ -66,7 +66,7 @@ export default function MapIndex() {
   ]
 
   const onOpenEdit = (index: number) => {
-    setManageOpen(false)
+    //setManageOpen(false)
     setError(null)
     setCarName(carNames?.[index] || '')
     setCarNumber(carNumbers?.[index]?.toString() || '')
