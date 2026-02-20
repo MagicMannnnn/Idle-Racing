@@ -51,6 +51,11 @@ jobs:
           BASE_PATH="/${{ github.event.repository.name }}/PRs/${{ github.event.pull_request.number }}"
           sed -i "s|${BASE_PATH}/assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/|${BASE_PATH}/_fonts/|g" dist/index.html
 
+          # Update title with timestamp
+          echo "=== Updating page title with timestamp ==="
+          TIMESTAMP=$(date -u +"%H:%M %d/%m")
+          sed -i "s|<title>[^<]*</title>|<title>${TIMESTAMP}</title>|g" dist/index.html
+
           # Copy index.html as 404.html for SPA routing (for completeness, though GH Pages uses root 404.html)
           echo "=== Creating 404.html for SPA routing ==="
           cp dist/index.html dist/404.html
@@ -131,7 +136,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add -A
-          git commit -m "Deploy web preview for PR #${PR_NUMBER}" || echo "No changes to commit"
+          TIMESTAMP=$(date -u +"%H:%M %d/%m")
+          git commit -m "${TIMESTAMP}" || echo "No changes to commit"
           git push origin gh-pages
 
       - name: Preview URL
