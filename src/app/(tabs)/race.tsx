@@ -12,6 +12,8 @@ type RaceResultEntry = {
   rating: number
   isTeam: boolean
   name: string
+  laps: number
+  gap: number
 }
 
 export default function RaceTab() {
@@ -129,8 +131,9 @@ export default function RaceTab() {
     // Get team driver name
     const teamDriverName = hiredDrivers.length > 0 ? hiredDrivers[0].name : 'Your Team'
 
-    // Create results with names
+    // Create results with names, laps, and gaps
     const usedNumbers = new Set<number>()
+    let prevProgress = 0
     const results: RaceResultEntry[] = carsWithProgress.map((car, idx) => {
       const carNumber = carNumbers[car.id - 1]
       let displayNumber: number
@@ -147,11 +150,17 @@ export default function RaceTab() {
       const isTeam = car.id === teamCarId
       const name = isTeam ? teamDriverName : `${carNames[car.id - 1] || 'Car'} #${displayNumber}`
 
+      // Calculate gap (same logic as TrackLeaderboard)
+      const gap = idx === 0 ? 0 : prevProgress - car.progress
+      prevProgress = car.progress
+
       return {
         position: idx + 1,
         rating: 0, // Not needed for display
         isTeam,
         name,
+        laps: car.laps,
+        gap,
       }
     })
 
@@ -257,11 +266,20 @@ export default function RaceTab() {
         <View style={styles.content}>
           <View style={styles.resultsCard}>
             <View style={styles.resultsHeader}>
-              <Text style={styles.resultsTitle}>Final Leaderboard</Text>
+              <Text style={styles.resultsTitle}>🏁 Final Results</Text>
               <Text style={styles.resultsSubtitle}>
-                Position {activeRace.position} / {activeRace.totalCars}
+                You finished P{activeRace.position} of {activeRace.totalCars}
               </Text>
             </View>
+
+            {/* Column Headers */}
+            <View style={styles.resultsTableHeader}>
+              <Text style={[styles.resultsTableHeaderText, styles.colPos]}>P</Text>
+              <Text style={[styles.resultsTableHeaderText, styles.colName]}>Driver</Text>
+              <Text style={[styles.resultsTableHeaderText, styles.colLaps]}>Laps</Text>
+              <Text style={[styles.resultsTableHeaderText, styles.colGap]}>Gap</Text>
+            </View>
+
             <ScrollView
               style={styles.resultsScroll}
               contentContainerStyle={styles.resultsScrollContent}
@@ -294,16 +312,18 @@ export default function RaceTab() {
                         {result.position}
                       </Text>
                     </View>
-                    <View style={styles.resultLeaderboardInfo}>
-                      <Text
-                        style={[
-                          styles.resultLeaderboardName,
-                          result.isTeam && styles.resultLeaderboardNameTeam,
-                        ]}
-                      >
-                        {result.name}
-                      </Text>
-                    </View>
+                    <Text
+                      style={[
+                        styles.resultLeaderboardName,
+                        result.isTeam && styles.resultLeaderboardNameTeam,
+                      ]}
+                    >
+                      {result.name}
+                    </Text>
+                    <Text style={styles.resultLeaderboardLaps}>{result.laps}</Text>
+                    <Text style={styles.resultLeaderboardGap}>
+                      {result.position === 1 ? '—' : `+${result.gap.toFixed(1)}`}
+                    </Text>
                   </View>
                 ))
               ) : (
@@ -340,14 +360,14 @@ export default function RaceTab() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F6F7FB',
   },
   headerWrap: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2e2e2e',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E8E8',
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
 
   headerTopRow: {
@@ -371,12 +391,12 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 24,
     fontWeight: '900',
-    color: '#0B0F14',
+    color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   pageSubtitle: {
     fontSize: 13,
-    color: 'rgba(0,0,0,0.55)',
+    color: 'rgba(255,255,255,0.7)',
     fontWeight: '700',
   },
 
@@ -435,55 +455,88 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 0,
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2e2e2e',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E8E8E8',
+    borderColor: 'rgba(255,255,255,0.1)',
     overflow: 'hidden',
   },
   resultsHeader: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8F9FA',
+    paddingVertical: 14,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E8E8',
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   resultsTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
-    color: '#0B0F14',
+    color: '#FFFFFF',
     letterSpacing: -0.3,
   },
   resultsSubtitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: 'rgba(0,0,0,0.55)',
-    marginTop: 2,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 4,
+  },
+  resultsTableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  resultsTableHeaderText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  colPos: {
+    width: 44,
+  },
+  colName: {
+    flex: 1,
+  },
+  colLaps: {
+    width: 48,
+    textAlign: 'right',
+  },
+  colGap: {
+    width: 62,
+    textAlign: 'right',
   },
   resultsScroll: {
     flex: 1,
   },
   resultsScrollContent: {
-    paddingVertical: 8,
+    paddingBottom: 8,
   },
   resultLeaderboardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 12,
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   resultLeaderboardRowTeam: {
-    backgroundColor: 'rgba(52,199,89,0.08)',
+    backgroundColor: 'rgba(52,199,89,0.15)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#34C759',
   },
   resultLeaderboardPosition: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
   resultLeaderboardPosition1st: {
     backgroundColor: '#FFD700',
@@ -498,30 +551,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#34C759',
   },
   resultLeaderboardPositionText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
-    color: '#0B0F14',
+    color: 'rgba(255,255,255,0.9)',
   },
   resultLeaderboardPositionTextTeam: {
     color: '#FFFFFF',
   },
-  resultLeaderboardInfo: {
-    flex: 1,
-  },
   resultLeaderboardName: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#0B0F14',
+    color: 'rgba(255,255,255,0.9)',
   },
   resultLeaderboardNameTeam: {
     fontWeight: '900',
-    color: '#34C759',
+    color: '#FFFFFF',
   },
-  resultLeaderboardRating: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(0,0,0,0.45)',
-    marginTop: 2,
+  resultLeaderboardLaps: {
+    width: 48,
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  resultLeaderboardGap: {
+    width: 62,
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   emptyResults: {
     padding: 48,
@@ -530,12 +591,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: '900',
-    color: 'rgba(0,0,0,0.35)',
+    color: 'rgba(255,255,255,0.4)',
     marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(0,0,0,0.25)',
+    color: 'rgba(255,255,255,0.3)',
   },
 })
