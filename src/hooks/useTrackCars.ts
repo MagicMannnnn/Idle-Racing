@@ -399,11 +399,11 @@ export function useTrackCars({
         const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
 
         // Apply rating multiplier if ratings are provided
-        // Minimal impact: rating gives 0.9-1.1x speed multiplier (max 10% difference)
-        // Formula: 0.9 + (rating / 5.0) * 0.2
-        // 5.0★ = 1.1x, 2.5★ = 1.0x, 0.1★ = 0.904x
+        // Higher impact: rating gives 0.85-1.15x speed multiplier (max 30% difference)
+        // Formula: 0.85 + (rating / 5.0) * 0.3
+        // 5.0★ = 1.15x, 2.5★ = 1.0x, 0.1★ = 0.852x
         const ratingMultiplier =
-          carRatings && carRatings[i] !== undefined ? 0.9 + (carRatings[i] / 5.0) * 0.2 : 1.0
+          carRatings && carRatings[i] !== undefined ? 0.85 + (carRatings[i] / 5.0) * 0.3 : 1.0
 
         const base = TUNE.baseSpeed * variance2 * ratingMultiplier
 

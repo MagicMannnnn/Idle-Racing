@@ -1,4 +1,4 @@
-import { useTrackCars } from '@hooks/useTrackCars'
+import { type CarAnim, useTrackCars } from '@hooks/useTrackCars'
 import { useIsFocused } from '@react-navigation/native'
 import { useTrackMaps } from '@state/useTrackMaps'
 import {
@@ -34,6 +34,7 @@ type Props = {
   durationMs: number
   teamAverageRating: number // Average of driver and car rating (determines distribution mean)
   speedVariance?: number // Optional speed variance (default: from settings). Use 12 for race tab.
+  onRaceStateUpdate?: (cars: CarAnim[]) => void // Callback to receive live car positions
 }
 
 const GRID_GAP = 1
@@ -272,6 +273,7 @@ export function DeterministicRaceView({
   durationMs,
   teamAverageRating,
   speedVariance,
+  onRaceStateUpdate,
 }: Props) {
   const ensure = useTrackMaps((s: any) => s.ensure)
   const grid = useTrackMaps((s: any) => s.get(trackId))
@@ -428,6 +430,20 @@ export function DeterministicRaceView({
 
     start()
   }, [runSim, loop.length, cars.length, newRace, start, seed, startedAt])
+
+  // Provide live race state updates to parent component
+  useEffect(() => {
+    if (!onRaceStateUpdate) return
+    if (cars.length === 0) return
+    if (!runSim) return
+
+    // Update parent with current car states periodically
+    const interval = setInterval(() => {
+      onRaceStateUpdate(cars)
+    }, 250) // 4 times per second
+
+    return () => clearInterval(interval)
+  }, [cars, onRaceStateUpdate, runSim])
 
   const standSet = useMemo(() => {
     if (!cells.length) return new Set<number>()
