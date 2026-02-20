@@ -242,7 +242,7 @@ export default function DriversPage() {
         <View style={styles.header}>
           <Text style={styles.pageTitle}>Drivers</Text>
           <Text style={styles.pageSubtitle}>
-            {allDrivers.length}/2 slots • Max {hq.maxDriverRating}★ rating
+            {allDrivers.length}/{hq.maxDriverRating} slots • Max {hq.maxDriverRating}★ rating
           </Text>
         </View>
       </View>
@@ -259,7 +259,9 @@ export default function DriversPage() {
             onFire={() => handleFire(driver.id, driver.name)}
           />
         ))}
-        {allDrivers.length < 2 && <EmptyDriverSlot onHire={() => setShowHireCarousel(true)} />}
+        {allDrivers.length < hq.maxDriverRating && (
+          <EmptyDriverSlot onHire={() => setShowHireCarousel(true)} />
+        )}
 
         {showHireCarousel && (
           <View style={styles.carouselSection}>

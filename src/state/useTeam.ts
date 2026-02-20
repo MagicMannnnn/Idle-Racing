@@ -111,7 +111,7 @@ type TeamState = {
   getHQUpgradeTimeReduction: () => number // 0-0.9
 
   // Driver functions
-  getDriverSlots: () => number // always 2
+  getDriverSlots: () => number // equals maxDriverRating (1-5)
 
   // Team race functions
   startTeamRace: (
@@ -689,7 +689,10 @@ function createActions(
       return getHQUpgradeTimeReduction(state.hq.level)
     },
 
-    getDriverSlots: () => 2,
+    getDriverSlots: () => {
+      const state = getState()
+      return state.hq.maxDriverRating
+    },
 
     quoteDriver: (rating: number) => {
       const state = getState()
@@ -697,8 +700,9 @@ function createActions(
       // Check if hiring in progress
       const hiringCount = state.drivers.filter((d) => d.hiringProgress !== undefined).length
       const hiredCount = state.drivers.filter((d) => d.hiringProgress === undefined).length
+      const maxDrivers = state.hq.maxDriverRating
 
-      if (hiringCount + hiredCount >= 2) {
+      if (hiringCount + hiredCount >= maxDrivers) {
         return { ok: false as const, reason: 'slots_full' as const }
       }
 
