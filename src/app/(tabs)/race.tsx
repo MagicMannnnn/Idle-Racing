@@ -525,9 +525,9 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   resultLeaderboardRowTeam: {
-    backgroundColor: 'rgba(52,199,89,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderLeftWidth: 3,
-    borderLeftColor: '#34C759',
+    borderLeftColor: 'rgba(255,255,255,0.4)',
   },
   resultLeaderboardPosition: {
     width: 32,
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#CD7F32',
   },
   resultLeaderboardPositionTeam: {
-    backgroundColor: '#34C759',
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
   resultLeaderboardPositionText: {
     fontSize: 15,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
   resultLeaderboardNameTeam: {
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.95)',
   },
   resultLeaderboardLaps: {
     width: 48,

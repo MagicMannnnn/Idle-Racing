@@ -344,7 +344,8 @@ export function DeterministicRaceView({
   const loop = useMemo(() => buildTrackLoop(cells ?? [], mapSize), [cells, mapSize])
 
   // Generate car ratings using normal distribution (deterministic from seed)
-  // Mean = teamAverageRating, StdDev = 0.8, clamped to 0.1-5.0 range
+  // Mean = teamAverageRating, StdDev = dynamic based on car count (tighter for fewer cars)
+  // 2 cars: stdDev≈0.04 (very tight), 20 cars: stdDev≈1.2 (good spread)
   const carRatings = useMemo(() => {
     const carCount = Math.min(trackSize, Math.floor(loop.length * 0.5), 20)
     if (carCount === 0) return []
@@ -358,14 +359,17 @@ export function DeterministicRaceView({
       return rng / 0xffffffff
     }
 
+    // Calculate standard deviation based on number of cars
+    // 2 cars: very tight (0.04), 5 cars: close (0.15), 10 cars: medium (0.42), 20 cars: spread (1.2)
+    const stdDev = Math.pow(carCount / 20, 1.5) * 1.2
+
     for (let i = 0; i < carCount; i++) {
       // Box-Muller transform to generate normal distribution
       const u1 = nextRandom()
       const u2 = nextRandom()
       const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
 
-      // Scale to mean=teamAverageRating, stdDev=0.8
-      const stdDev = 0.8
+      // Scale to mean=teamAverageRating with dynamic stdDev
       const rating = teamAverageRating + z0 * stdDev
 
       // Clamp to valid range 0.1-5.0
