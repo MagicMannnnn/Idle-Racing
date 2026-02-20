@@ -200,7 +200,7 @@ export default function UpgradesPage() {
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.headerWrap}>
-        <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={10}>
+        <Pressable onPress={() => router.replace('/team')} style={styles.backButton} hitSlop={10}>
           <Text style={styles.backIcon}>‹</Text>
           <Text style={styles.backText}>Back</Text>
         </Pressable>

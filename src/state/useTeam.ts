@@ -60,6 +60,7 @@ export type ActiveTeamRace = {
   position?: number
   totalCars?: number
   teamAverageRating?: number
+  knowledgeAwarded?: boolean // Track if knowledge points were already awarded for this race
 }
 
 export type RaceResult = {
@@ -116,7 +117,12 @@ type TeamState = {
     trackId: string,
     duration: number,
   ) => { ok: true } | { ok: false; reason: 'no_drivers' | 'already_racing' }
-  finishTeamRace: (position: number, totalCars: number, teamAverageRating: number) => void
+  finishTeamRace: (
+    position: number,
+    totalCars: number,
+    teamAverageRating: number,
+    knowledgeAwarded?: boolean,
+  ) => void
   clearTeamRace: () => void
   getActiveRace: () => ActiveTeamRace | undefined
 
@@ -334,7 +340,13 @@ type Action =
   | { type: 'HIRE_DRIVER'; driver: Driver; cost: number; time: number; now: number }
   | { type: 'FIRE_DRIVER'; driverId: string }
   | { type: 'START_TEAM_RACE'; trackId: string; duration: number; now: number; seed: number }
-  | { type: 'FINISH_TEAM_RACE'; position: number; totalCars: number; teamAverageRating: number }
+  | {
+      type: 'FINISH_TEAM_RACE'
+      position: number
+      totalCars: number
+      teamAverageRating: number
+      knowledgeAwarded?: boolean
+    }
   | { type: 'CLEAR_TEAM_RACE' }
   | { type: 'STOP_TEAM_RACE'; result?: RaceResult; lastTeamRace?: LastTeamRace }
   | { type: 'CLEAR_RACE_RESULT' }
@@ -421,6 +433,7 @@ function reducer(
           position: action.position,
           totalCars: action.totalCars,
           teamAverageRating: action.teamAverageRating,
+          knowledgeAwarded: action.knowledgeAwarded ?? state.activeRace.knowledgeAwarded,
         },
       }
     }
@@ -773,8 +786,19 @@ function createActions(
       dispatch({ type: 'STOP_TEAM_RACE', result, lastTeamRace })
     },
 
-    finishTeamRace: (position: number, totalCars: number, teamAverageRating: number) => {
-      dispatch({ type: 'FINISH_TEAM_RACE', position, totalCars, teamAverageRating })
+    finishTeamRace: (
+      position: number,
+      totalCars: number,
+      teamAverageRating: number,
+      knowledgeAwarded?: boolean,
+    ) => {
+      dispatch({
+        type: 'FINISH_TEAM_RACE',
+        position,
+        totalCars,
+        teamAverageRating,
+        knowledgeAwarded,
+      })
     },
 
     clearTeamRace: () => {

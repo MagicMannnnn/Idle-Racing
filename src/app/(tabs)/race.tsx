@@ -1,5 +1,6 @@
 import { DeterministicRaceView } from '@components/maps/DeterministicRaceView'
 import type { CarAnim } from '@hooks/useTrackCars'
+import { usePrestige } from '@state/usePrestige'
 import { useTeam } from '@state/useTeam'
 import { useTrackMaps } from '@state/useTrackMaps'
 import { useTracks } from '@state/useTracks'
@@ -14,6 +15,27 @@ type RaceResultEntry = {
   name: string
   laps: number
   gap: number
+  knowledgePoints: number
+}
+
+// Calculate knowledge points based on position and total cars
+// Up to top 10 drivers, max 50% of field gets rewards
+function calculateKnowledgePoints(position: number, totalCars: number): number {
+  const rewardCount = Math.min(10, Math.floor(totalCars / 2))
+  if (position > rewardCount) return 0
+
+  // For small reward counts (≤5), use simple linear countdown
+  if (rewardCount <= 5) {
+    return rewardCount - position + 1
+  }
+
+  // For larger races, use scaled points with diminishing returns
+  // Examples: 20 drivers (10 rewards) → 25, 20, 16, 13, 11, 8, 6, 4, 2, 1
+  const positionRatio = (rewardCount - position + 1) / rewardCount
+  const maxPoints = rewardCount * 2.5
+  const points = Math.round(positionRatio * positionRatio * maxPoints)
+
+  return Math.max(1, points)
 }
 
 export default function RaceTab() {
@@ -22,6 +44,7 @@ export default function RaceTab() {
   const upgrades = useTeam((s: any) => s.upgrades)
   const finishTeamRace = useTeam((s: any) => s.finishTeamRace)
   const allTracks = useTracks((s: any) => s.tracks)
+  const addKnowledge = usePrestige((s: any) => s.addKnowledge)
 
   // Get track from activeRace
   const trackId = activeRace?.trackId
@@ -154,6 +177,9 @@ export default function RaceTab() {
       const gap = idx === 0 ? 0 : prevProgress - car.progress
       prevProgress = car.progress
 
+      // Calculate knowledge points reward
+      const knowledgePoints = calculateKnowledgePoints(idx + 1, carsWithProgress.length)
+
       return {
         position: idx + 1,
         rating: 0, // Not needed for display
@@ -161,15 +187,33 @@ export default function RaceTab() {
         name,
         laps: car.laps,
         gap,
+        knowledgePoints,
       }
     })
 
     // Store results for display
     setRaceResults(results)
 
+    // Award knowledge points to team driver if not already awarded
+    if (!activeRace.knowledgeAwarded) {
+      const teamResult = results.find((r) => r.isTeam)
+      if (teamResult && teamResult.knowledgePoints > 0) {
+        addKnowledge(teamResult.knowledgePoints)
+      }
+    }
+
     // Finish race by adding result data to activeRace
-    finishTeamRace(teamPosition, carsWithProgress.length, teamAverageRating)
-  }, [activeRace, track, teamAverageRating, finishTeamRace, hiredDrivers, carNames, carNumbers])
+    finishTeamRace(teamPosition, carsWithProgress.length, teamAverageRating, true)
+  }, [
+    activeRace,
+    track,
+    teamAverageRating,
+    finishTeamRace,
+    hiredDrivers,
+    carNames,
+    carNumbers,
+    addKnowledge,
+  ])
 
   // Auto-finish race when timer is at 1 second or less (save results early)
   useEffect(() => {
@@ -276,6 +320,7 @@ export default function RaceTab() {
             <View style={styles.resultsTableHeader}>
               <Text style={[styles.resultsTableHeaderText, styles.colPos]}>P</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colName]}>Driver</Text>
+              <Text style={[styles.resultsTableHeaderText, styles.colKnowledge]}>KP</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colLaps]}>Laps</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colGap]}>Gap</Text>
             </View>
@@ -319,6 +364,9 @@ export default function RaceTab() {
                       ]}
                     >
                       {result.name}
+                    </Text>
+                    <Text style={styles.resultLeaderboardKnowledge}>
+                      {result.knowledgePoints > 0 ? `+${result.knowledgePoints}` : '—'}
                     </Text>
                     <Text style={styles.resultLeaderboardLaps}>{result.laps}</Text>
                     <Text style={styles.resultLeaderboardGap}>
@@ -502,6 +550,10 @@ const styles = StyleSheet.create({
   colName: {
     flex: 1,
   },
+  colKnowledge: {
+    width: 48,
+    textAlign: 'right',
+  },
   colLaps: {
     width: 48,
     textAlign: 'right',
@@ -567,6 +619,14 @@ const styles = StyleSheet.create({
   resultLeaderboardNameTeam: {
     fontWeight: '900',
     color: 'rgba(255,255,255,0.95)',
+  },
+  resultLeaderboardKnowledge: {
+    width: 48,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#BB86FC',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   resultLeaderboardLaps: {
     width: 48,

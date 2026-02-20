@@ -11,6 +11,7 @@ type PrestigeState = {
 
   calculateKnowledge: () => number
   calculateEarningsMultiplier: () => number
+  addKnowledge: (amount: number) => void
 
   prestige: () => void
   reset: () => void
@@ -116,6 +117,13 @@ if (Platform.OS === 'web') {
       return parseFloat((1 + (state.totalKnowledge / 100) * 2).toFixed(2))
     },
 
+    addKnowledge: (amount: number) => {
+      if (amount <= 0) return
+      state.knowledge += amount
+      state.totalKnowledge += amount
+      notify()
+    },
+
     prestige: () => {
       const knowledgeGained = calculateKnowledgeFromTracks()
 
@@ -190,6 +198,14 @@ if (Platform.OS === 'web') {
           // Linear progression: 1x + (totalKnowledge / 100) * 2
           // Each knowledge point adds 0.02x to the multiplier
           return parseFloat((1 + (totalKnowledge / 100) * 2).toFixed(2))
+        },
+
+        addKnowledge: (amount: number) => {
+          if (amount <= 0) return
+          set((s: any) => ({
+            knowledge: s.knowledge + amount,
+            totalKnowledge: s.totalKnowledge + amount,
+          }))
         },
 
         prestige: () => {
