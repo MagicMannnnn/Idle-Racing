@@ -184,7 +184,7 @@ export default function TeamIndex() {
           icon="people"
           title="Drivers"
           bigValue={`${hiredDrivers.length}`}
-          bigUnit=" / 2"
+          bigUnit={` / ${hq.maxDriverRating}`}
           subtitle={
             hiringDrivers.length > 0
               ? `${hiringDrivers.length} driver${hiringDrivers.length > 1 ? 's' : ''} hiring...`
