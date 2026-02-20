@@ -15,6 +15,7 @@ export type Driver = {
   hiringProgress?: number // 0-1 if currently hiring
   hiringStartedAt?: number
   cost: number
+  contractExpiresAt?: number // timestamp when contract expires (only set after hiring completes)
 }
 
 export type UpgradeType =
@@ -48,10 +49,18 @@ export type HQ = {
   maxDriverRating: number // 1-5, unlocks as HQ levels up
 }
 
+export type ActiveTeamRace = {
+  trackId: string
+  duration: number // minutes
+  startedAt: number
+  seed: number // for deterministic race simulation
+}
+
 type TeamState = {
   hq: HQ
   drivers: Driver[]
   upgrades: CarUpgrade[]
+  activeRace?: ActiveTeamRace
 
   // HQ functions
   quoteHQUpgrade: () =>
@@ -71,6 +80,15 @@ type TeamState = {
 
   // Driver functions
   getDriverSlots: () => number // always 2
+
+  // Team race functions
+  startTeamRace: (
+    trackId: string,
+    duration: number,
+  ) => { ok: true } | { ok: false; reason: 'no_drivers' | 'already_racing' }
+  stopTeamRace: () => void
+  getActiveRace: () => ActiveTeamRace | undefined
+
   quoteDriver: (
     rating: number,
   ) =>
@@ -265,6 +283,7 @@ function createInitialState(): Omit<TeamState, keyof ReturnType<typeof createAct
     },
     drivers: [],
     upgrades,
+    activeRace: undefined,
   }
 }
 
@@ -272,6 +291,8 @@ type Action =
   | { type: 'UPGRADE_HQ'; cost: number; toLevel: number; time: number; now: number }
   | { type: 'HIRE_DRIVER'; driver: Driver; cost: number; time: number; now: number }
   | { type: 'FIRE_DRIVER'; driverId: string }
+  | { type: 'START_TEAM_RACE'; trackId: string; duration: number; now: number; seed: number }
+  | { type: 'STOP_TEAM_RACE' }
   | {
       type: 'UPGRADE_CAR'
       upgradeType: UpgradeType
@@ -327,6 +348,25 @@ function reducer(
       return {
         ...state,
         drivers: state.drivers.filter((d) => d.id !== action.driverId),
+      }
+    }
+
+    case 'START_TEAM_RACE': {
+      return {
+        ...state,
+        activeRace: {
+          trackId: action.trackId,
+          duration: action.duration,
+          startedAt: action.now,
+          seed: action.seed,
+        },
+      }
+    }
+
+    case 'STOP_TEAM_RACE': {
+      return {
+        ...state,
+        activeRace: undefined,
       }
     }
 
@@ -402,18 +442,29 @@ function reducer(
           const progress = Math.min(1, elapsed / totalTime)
 
           if (progress >= 1) {
-            // Hiring complete
+            // Hiring complete - set 1 hour contract
             const {
               hiringProgress: _hiringProgress,
               hiringStartedAt: _hiringStartedAt,
               ...completedDriver
             } = driver
-            return completedDriver
+            return {
+              ...completedDriver,
+              contractExpiresAt: action.now + 3600000, // 1 hour from now
+            }
           } else {
             return { ...driver, hiringProgress: progress }
           }
         }
         return driver
+      })
+
+      // Remove drivers whose contracts have expired
+      newState.drivers = newState.drivers.filter((driver) => {
+        if (driver.contractExpiresAt && action.now >= driver.contractExpiresAt) {
+          return false // Remove expired driver
+        }
+        return true
       })
 
       // Update car upgrade progress
@@ -446,6 +497,14 @@ function reducer(
         }
         return upgrade
       })
+
+      // Check if active race has ended (based on duration)
+      if (newState.activeRace) {
+        const raceEndTime = newState.activeRace.startedAt + newState.activeRace.duration * 60 * 1000
+        if (action.now >= raceEndTime) {
+          newState.activeRace = undefined
+        }
+      }
 
       return newState
     }
@@ -595,6 +654,33 @@ function createActions(
 
       dispatch({ type: 'FIRE_DRIVER', driverId })
       return { ok: true as const }
+    },
+
+    startTeamRace: (trackId: string, duration: number) => {
+      const state = getState()
+      const hiredDrivers = state.drivers.filter((d) => d.hiringProgress === undefined)
+
+      if (hiredDrivers.length === 0) {
+        return { ok: false as const, reason: 'no_drivers' as const }
+      }
+
+      if (state.activeRace) {
+        return { ok: false as const, reason: 'already_racing' as const }
+      }
+
+      const now = Date.now()
+      const seed = (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0
+
+      dispatch({ type: 'START_TEAM_RACE', trackId, duration, now, seed })
+      return { ok: true as const }
+    },
+
+    stopTeamRace: () => {
+      dispatch({ type: 'STOP_TEAM_RACE' })
+    },
+
+    getActiveRace: () => {
+      return getState().activeRace
     },
 
     quoteCarUpgrade: (type: UpgradeType, mode: UpgradeMode) => {
@@ -753,13 +839,13 @@ const STORAGE_KEY = 'idle.team.v1'
 
 let useTeam: any
 
-// Web implementation using localStorage
-if (Platform.OS === 'web') {
-  let state = createInitialState()
-  const listeners = new Set<() => void>()
+// Shared state implementation for all platforms
+let state = createInitialState()
+const listeners = new Set<() => void>()
 
-  const loadFromStorage = () => {
-    try {
+const loadFromStorage = async () => {
+  try {
+    if (Platform.OS === 'web') {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
@@ -767,56 +853,64 @@ if (Platform.OS === 'web') {
           state = { ...createInitialState(), ...parsed.state }
         }
       }
-    } catch (e) {
-      console.error('Failed to load team state', e)
-    }
-  }
-
-  const saveToStorage = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 1 }))
-    } catch (e) {
-      console.error('Failed to save team state', e)
-    }
-  }
-
-  const notify = () => {
-    listeners.forEach((fn) => fn())
-  }
-
-  const getState = () => state
-
-  const dispatch = (action: Action) => {
-    state = reducer(state, action)
-    saveToStorage()
-    notify()
-  }
-
-  loadFromStorage()
-
-  useTeam = (selector?: (state: TeamState) => any) => {
-    const [, forceUpdate] = useReducer((x) => x + 1, 0)
-
-    useEffect(() => {
-      listeners.add(forceUpdate)
-      return () => {
-        listeners.delete(forceUpdate)
+    } else {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default
+      const stored = await AsyncStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed.version === 1 && parsed.state) {
+          state = { ...createInitialState(), ...parsed.state }
+        }
       }
-    }, [])
-
-    const fullState = { ...getState(), ...createActions(dispatch, getState) }
-    return selector ? selector(fullState) : fullState
-  }
-
-  useTeam.getState = () => ({ ...getState(), ...createActions(dispatch, getState) })
-} else {
-  // React Native implementation
-  useTeam = (selector?: (state: TeamState) => any) => {
-    const [state, dispatch] = useReducer(reducer, undefined, createInitialState)
-
-    const fullState = { ...state, ...createActions(dispatch, () => state) }
-    return selector ? selector(fullState) : fullState
+    }
+  } catch (e) {
+    console.error('Failed to load team state', e)
   }
 }
+
+const saveToStorage = () => {
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 1 }))
+    } else {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 1 })).catch((e: any) => {
+        console.error('Failed to save team state', e)
+      })
+    }
+  } catch (e) {
+    console.error('Failed to save team state', e)
+  }
+}
+
+const notify = () => {
+  listeners.forEach((fn) => fn())
+}
+
+const getState = () => state
+
+const dispatch = (action: Action) => {
+  state = reducer(state, action)
+  saveToStorage()
+  notify()
+}
+
+loadFromStorage()
+
+useTeam = (selector?: (state: TeamState) => any) => {
+  const [, forceUpdate] = useReducer((x) => x + 1, 0)
+
+  useEffect(() => {
+    listeners.add(forceUpdate)
+    return () => {
+      listeners.delete(forceUpdate)
+    }
+  }, [])
+
+  const fullState = { ...getState(), ...createActions(dispatch, getState) }
+  return selector ? selector(fullState) : fullState
+}
+
+useTeam.getState = () => ({ ...getState(), ...createActions(dispatch, getState) })
 
 export { useTeam }

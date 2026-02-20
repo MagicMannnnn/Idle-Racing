@@ -58,6 +58,31 @@ function StarRating({ rating, maxRating = 5 }: { rating: number; maxRating?: num
 
 function DriverCard({ driver, onFire }: { driver: Driver; onFire: () => void }) {
   const isHiring = driver.hiringProgress !== undefined
+  const [now, setNow] = useState(Date.now())
+
+  // Update time every second for contract countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const formatTimeRemaining = (expiresAt: number) => {
+    const remaining = Math.max(0, expiresAt - now)
+    const totalSeconds = Math.floor(remaining / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m remaining`
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s remaining`
+    } else {
+      return `${seconds}s remaining`
+    }
+  }
 
   return (
     <View style={styles.card}>
@@ -91,9 +116,18 @@ function DriverCard({ driver, onFire }: { driver: Driver; onFire: () => void }) 
       </View>
 
       <View style={styles.driverMeta}>
-        <Text style={styles.driverMetaText}>
-          {isHiring ? 'Hiring in progress...' : 'Ready to race'}
-        </Text>
+        {isHiring ? (
+          <Text style={styles.driverMetaText}>Hiring in progress...</Text>
+        ) : driver.contractExpiresAt ? (
+          <View style={styles.contractInfo}>
+            <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.60)" />
+            <Text style={styles.driverMetaText}>
+              Contract: {formatTimeRemaining(driver.contractExpiresAt)}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.driverMetaText}>Ready to race</Text>
+        )}
       </View>
     </View>
   )
@@ -406,6 +440,11 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.60)',
     fontSize: 14,
     fontWeight: '700',
+  },
+  contractInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
 
   emptyCard: {
