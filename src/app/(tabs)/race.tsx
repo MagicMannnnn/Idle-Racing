@@ -2,18 +2,79 @@ import { DeterministicRaceView } from '@components/maps/DeterministicRaceView'
 import { useTeam } from '@state/useTeam'
 import { useTrackMaps } from '@state/useTrackMaps'
 import { useTracks } from '@state/useTracks'
-import { router } from 'expo-router'
-import React, { useEffect, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { mix32 } from '@utils/map'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+
+type RaceResultEntry = {
+  position: number
+  rating: number
+  isTeam: boolean
+  name: string
+}
+
+// Generate deterministic race results based on seed
+function generateRaceResults(
+  seed: number,
+  totalCars: number,
+  teamAverageRating: number,
+  teamPosition: number,
+  teamDriverName: string,
+): RaceResultEntry[] {
+  // Generate car ratings using same method as DeterministicRaceView
+  const ratings: number[] = []
+  let rng = mix32(seed ^ 0x9e3779b9)
+
+  const nextRandom = () => {
+    rng = mix32(rng)
+    return rng / 0xffffffff
+  }
+
+  for (let i = 0; i < totalCars; i++) {
+    const u1 = nextRandom()
+    const u2 = nextRandom()
+    const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
+    const stdDev = 0.8
+    const rating = teamAverageRating + z0 * stdDev
+    const clampedRating = Math.max(0.1, Math.min(5.0, rating))
+    ratings.push(clampedRating)
+  }
+
+  // Assign finishing positions based on ratings with randomness
+  const carsWithScores = ratings.map((rating, idx) => {
+    const performanceSeed = seed ^ (idx * 7919)
+    const randomFactor = ((performanceSeed % 1000) / 1000) * 0.3
+    const ratingFactor = (rating / 5.0) * 0.7
+    const score = ratingFactor + randomFactor
+    return { idx, rating, score }
+  })
+
+  // Sort by score (higher is better)
+  carsWithScores.sort((a, b) => b.score - a.score)
+
+  // Create results with positions
+  const results: RaceResultEntry[] = carsWithScores.map((car, position) => ({
+    position: position + 1,
+    rating: car.rating,
+    isTeam: position + 1 === teamPosition,
+    name: position + 1 === teamPosition ? teamDriverName : `Driver ${car.idx + 1}`,
+  }))
+
+  return results
+}
 
 export default function RaceTab() {
   const activeRace = useTeam((s: any) => s.activeRace)
-  const lastRaceResult = useTeam((s: any) => s.lastRaceResult)
   const drivers = useTeam((s: any) => s.drivers)
   const upgrades = useTeam((s: any) => s.upgrades)
-  const stopTeamRace = useTeam((s: any) => s.stopTeamRace)
-  const track = useTracks((s: any) => s.tracks.find((t: any) => t.id === activeRace?.trackId))
+  const finishTeamRace = useTeam((s: any) => s.finishTeamRace)
+  const allTracks = useTracks((s: any) => s.tracks)
+
+  // Get track from activeRace
+  const trackId = activeRace?.trackId
+  const track = allTracks.find((t: any) => t.id === trackId)
+
   const setCarName = useTrackMaps((s: any) => s.setCarName)
 
   const [now, setNow] = useState(Date.now())
@@ -52,7 +113,7 @@ export default function RaceTab() {
 
   // Calculate time remaining
   const timeRemaining = useMemo(() => {
-    if (!activeRace) return 0
+    if (!activeRace || activeRace.finishedAt) return 0
     const endTime = activeRace.startedAt + activeRace.duration * 60 * 1000
     const remaining = Math.max(0, endTime - now)
     return Math.ceil(remaining / 1000) // seconds
@@ -78,8 +139,8 @@ export default function RaceTab() {
     return track.index < 2 ? 5 + track.index * 2 : 6 + track.index
   }, [track])
 
-  const handleEndRace = () => {
-    if (!activeRace || !track) return
+  const handleEndRace = useCallback(() => {
+    if (!activeRace || !track || activeRace.finishedAt) return
 
     // Calculate deterministic race position based on seed and team rating
     // Use a simple hash to get a position based on performance
@@ -97,52 +158,59 @@ export default function RaceTab() {
       Math.min(totalCars, Math.floor((1 - combinedScore) * totalCars) + 1),
     )
 
-    stopTeamRace({
-      trackId: track.id,
-      trackName: track.name,
-      duration: activeRace.duration,
-      finishedAt: Date.now(),
-      position,
-      totalCars,
-    })
+    // Finish race by adding result data to activeRace
+    finishTeamRace(position, totalCars, teamAverageRating)
+  }, [activeRace, track, teamAverageRating, finishTeamRace])
 
-    router.replace('/(tabs)/team')
-  }
+  // Auto-finish race when timer is at 1 second or less (save results early)
+  useEffect(() => {
+    if (activeRace && !activeRace.finishedAt && timeRemaining <= 1) {
+      handleEndRace()
+    }
+  }, [activeRace, timeRemaining, handleEndRace])
 
-  if (!activeRace || !track) {
+  // Show results or empty state
+  const isFinished = activeRace && activeRace.finishedAt !== undefined
+
+  if (!activeRace) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.notFound}>
-          {lastRaceResult ? (
-            <>
-              <Text style={styles.pageTitle}>Race Complete!</Text>
-              <View style={styles.resultCard}>
-                <Text style={styles.resultTrack}>{lastRaceResult.trackName}</Text>
-                <View style={styles.resultRow}>
-                  <Text style={styles.resultLabel}>Position:</Text>
-                  <Text style={styles.resultValue}>
-                    {lastRaceResult.position} / {lastRaceResult.totalCars}
-                  </Text>
-                </View>
-                <View style={styles.resultRow}>
-                  <Text style={styles.resultLabel}>Duration:</Text>
-                  <Text style={styles.resultValue}>{lastRaceResult.duration} minutes</Text>
-                </View>
-              </View>
-              <Text style={styles.pageSubtitle}>Start another race from My Team</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.pageTitle}>No active race</Text>
+        <View style={styles.headerWrap}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.trackInfo}>
+              <Text style={styles.pageTitle}>Race Results</Text>
               <Text style={styles.pageSubtitle}>Start a race from My Team</Text>
-            </>
-          )}
+            </View>
+          </View>
+        </View>
+        <View style={styles.content}>
+          <View style={styles.resultsCard}>
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsTitle}>Final Results</Text>
+            </View>
+            <View style={styles.emptyResults}>
+              <Text style={styles.emptyText}>No race results yet</Text>
+              <Text style={styles.emptySubtext}>Complete a race to see results here</Text>
+            </View>
+          </View>
         </View>
       </SafeAreaView>
     )
   }
 
-  if (hiredDrivers.length === 0) {
+  if (!track) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.notFound}>
+          <Text style={styles.pageTitle}>Track not found</Text>
+          <Text style={styles.pageSubtitle}>Start a race from My Team</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // Only check for hired drivers if there's an active race that hasn't finished
+  if (!isFinished && hiredDrivers.length === 0) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.notFound}>
@@ -160,45 +228,104 @@ export default function RaceTab() {
           <View style={styles.trackInfo}>
             <Text style={styles.pageTitle}>{track.name}</Text>
             <Text style={styles.pageSubtitle}>
-              Racing as {hiredDrivers[0].name} • {hiredDrivers[0].rating}★
+              {isFinished
+                ? `Final Results • ${activeRace.position} / ${activeRace.totalCars}`
+                : `Racing as ${hiredDrivers[0].name} • ${hiredDrivers[0].rating}★`}
             </Text>
           </View>
 
           <View style={styles.rightSection}>
-            {timeRemaining > 0 ? (
-              <View style={styles.countdownPill}>
-                <Text style={styles.countdownText}>{formatTimeRemaining(timeRemaining)}</Text>
+            {!isFinished && (
+              <View style={timeRemaining > 0 ? styles.countdownPill : styles.finishedPill}>
+                <Text style={timeRemaining > 0 ? styles.countdownText : styles.finishedText}>
+                  {timeRemaining > 0 ? formatTimeRemaining(timeRemaining) : 'Finished'}
+                </Text>
               </View>
-            ) : (
-              <View style={styles.finishedPill}>
-                <Text style={styles.finishedText}>Finished</Text>
-              </View>
-            )}
-
-            {timeRemaining === 0 && (
-              <Pressable onPress={handleEndRace} style={styles.endBtn}>
-                <Text style={styles.endBtnText}>End Race</Text>
-              </Pressable>
             )}
           </View>
         </View>
       </View>
 
-      <View style={styles.content}>
-        <DeterministicRaceView
-          trackId={track.id}
-          initialGridSize={initialGridSize}
-          capacity={track.capacity}
-          maxCapacity={track.maxCapacity}
-          entertainment={track.entertainment}
-          maxEntertainment={track.maxEntertainment}
-          trackSize={track.trackSize}
-          seed={activeRace.seed}
-          startedAt={activeRace.startedAt}
-          durationMs={activeRace.duration * 60 * 1000}
-          teamAverageRating={teamAverageRating}
-        />
-      </View>
+      {isFinished ? (
+        <View style={styles.content}>
+          <View style={styles.resultsCard}>
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsTitle}>Final Leaderboard</Text>
+              <Text style={styles.resultsSubtitle}>
+                Position {activeRace.position} / {activeRace.totalCars}
+              </Text>
+            </View>
+            <ScrollView
+              style={styles.resultsScroll}
+              contentContainerStyle={styles.resultsScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {generateRaceResults(
+                activeRace.seed,
+                activeRace.totalCars || 20,
+                activeRace.teamAverageRating || teamAverageRating,
+                activeRace.position || 1,
+                hiredDrivers[0]?.name || 'Your Team',
+              ).map((result) => (
+                <View
+                  key={result.position}
+                  style={[
+                    styles.resultLeaderboardRow,
+                    result.isTeam && styles.resultLeaderboardRowTeam,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.resultLeaderboardPosition,
+                      result.position === 1 && styles.resultLeaderboardPosition1st,
+                      result.position === 2 && styles.resultLeaderboardPosition2nd,
+                      result.position === 3 && styles.resultLeaderboardPosition3rd,
+                      result.isTeam && styles.resultLeaderboardPositionTeam,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.resultLeaderboardPositionText,
+                        result.isTeam && styles.resultLeaderboardPositionTextTeam,
+                      ]}
+                    >
+                      {result.position}
+                    </Text>
+                  </View>
+                  <View style={styles.resultLeaderboardInfo}>
+                    <Text
+                      style={[
+                        styles.resultLeaderboardName,
+                        result.isTeam && styles.resultLeaderboardNameTeam,
+                      ]}
+                    >
+                      {result.name}
+                    </Text>
+                    <Text style={styles.resultLeaderboardRating}>{result.rating.toFixed(2)}★</Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.content}>
+          <DeterministicRaceView
+            trackId={track.id}
+            initialGridSize={initialGridSize}
+            capacity={track.capacity}
+            maxCapacity={track.maxCapacity}
+            entertainment={track.entertainment}
+            maxEntertainment={track.maxEntertainment}
+            trackSize={track.trackSize}
+            seed={activeRace.seed}
+            startedAt={activeRace.startedAt}
+            durationMs={activeRace.duration * 60 * 1000}
+            teamAverageRating={teamAverageRating}
+            speedVariance={12}
+          />
+        </View>
+      )}
     </SafeAreaView>
   )
 }
@@ -296,40 +423,112 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  resultCard: {
+
+  resultsCard: {
+    margin: 16,
+    marginBottom: 0,
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 24,
-    marginVertical: 24,
-    gap: 16,
-    minWidth: 300,
     borderWidth: 1,
     borderColor: '#E8E8E8',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    overflow: 'hidden',
   },
-  resultTrack: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0B0F14',
-    textAlign: 'center',
-    marginBottom: 8,
+  resultsHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F8F9FA',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E8E8',
   },
-  resultRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  resultLabel: {
-    fontSize: 15,
-    color: 'rgba(0,0,0,0.55)',
-    fontWeight: '600',
-  },
-  resultValue: {
-    fontSize: 17,
+  resultsTitle: {
+    fontSize: 16,
     fontWeight: '900',
     color: '#0B0F14',
+    letterSpacing: -0.3,
+  },
+  resultsSubtitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(0,0,0,0.55)',
+    marginTop: 2,
+  },
+  resultsScroll: {
+    flex: 1,
+  },
+  resultsScrollContent: {
+    paddingVertical: 8,
+  },
+  resultLeaderboardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  resultLeaderboardRowTeam: {
+    backgroundColor: 'rgba(52,199,89,0.08)',
+  },
+  resultLeaderboardPosition: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultLeaderboardPosition1st: {
+    backgroundColor: '#FFD700',
+  },
+  resultLeaderboardPosition2nd: {
+    backgroundColor: '#C0C0C0',
+  },
+  resultLeaderboardPosition3rd: {
+    backgroundColor: '#CD7F32',
+  },
+  resultLeaderboardPositionTeam: {
+    backgroundColor: '#34C759',
+  },
+  resultLeaderboardPositionText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0B0F14',
+  },
+  resultLeaderboardPositionTextTeam: {
+    color: '#FFFFFF',
+  },
+  resultLeaderboardInfo: {
+    flex: 1,
+  },
+  resultLeaderboardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0B0F14',
+  },
+  resultLeaderboardNameTeam: {
+    fontWeight: '900',
+    color: '#34C759',
+  },
+  resultLeaderboardRating: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 2,
+  },
+  emptyResults: {
+    padding: 48,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: 'rgba(0,0,0,0.35)',
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(0,0,0,0.25)',
   },
 })

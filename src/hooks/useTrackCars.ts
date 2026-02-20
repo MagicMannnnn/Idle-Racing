@@ -26,6 +26,7 @@ type UseTrackCarsOpts = {
   carWPx?: number
   carHPx?: number
   carRatings?: number[] // Optional ratings (0.1-5.0) for each car, affects speed
+  speedVariance?: number // Optional speed variance override (default: from settings)
 }
 
 const dirToDeg = (d: Dir) => (d === 'N' ? 0 : d === 'E' ? 90 : d === 'S' ? 180 : 270)
@@ -224,11 +225,14 @@ export function useTrackCars({
   carWPx,
   carHPx,
   carRatings,
+  speedVariance: speedVarianceOverride,
 }: UseTrackCarsOpts) {
   const len = loop.length
   const maxCarCount = useSettings((s: any) => s.maxCarCount)
   const safeCarCount = Math.min(carCount, len, maxCarCount)
-  const variance = useSettings((s: any) => s.speedVariance) / 100
+  const settingsVariance = useSettings((s: any) => s.speedVariance)
+  const variance =
+    (speedVarianceOverride !== undefined ? speedVarianceOverride : settingsVariance) / 100
 
   const TUNE = useMemo(() => {
     return {
@@ -395,11 +399,11 @@ export function useTrackCars({
         const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
 
         // Apply rating multiplier if ratings are provided
-        // Reduced impact: rating gives 0.85-1.15x speed multiplier (max 15% difference)
-        // Formula: 0.85 + (rating / 5.0) * 0.3
-        // 5.0★ = 1.15x, 2.5★ = 1.0x, 0.1★ = 0.856x
+        // Minimal impact: rating gives 0.9-1.1x speed multiplier (max 10% difference)
+        // Formula: 0.9 + (rating / 5.0) * 0.2
+        // 5.0★ = 1.1x, 2.5★ = 1.0x, 0.1★ = 0.904x
         const ratingMultiplier =
-          carRatings && carRatings[i] !== undefined ? 0.85 + (carRatings[i] / 5.0) * 0.3 : 1.0
+          carRatings && carRatings[i] !== undefined ? 0.9 + (carRatings[i] / 5.0) * 0.2 : 1.0
 
         const base = TUNE.baseSpeed * variance2 * ratingMultiplier
 

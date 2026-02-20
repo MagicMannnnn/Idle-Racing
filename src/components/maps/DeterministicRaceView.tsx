@@ -33,6 +33,7 @@ type Props = {
   startedAt: number
   durationMs: number
   teamAverageRating: number // Average of driver and car rating (determines distribution mean)
+  speedVariance?: number // Optional speed variance (default: from settings). Use 12 for race tab.
 }
 
 const GRID_GAP = 1
@@ -270,6 +271,7 @@ export function DeterministicRaceView({
   startedAt,
   durationMs,
   teamAverageRating,
+  speedVariance,
 }: Props) {
   const ensure = useTrackMaps((s: any) => s.ensure)
   const grid = useTrackMaps((s: any) => s.get(trackId))
@@ -342,7 +344,7 @@ export function DeterministicRaceView({
   // Generate car ratings using normal distribution (deterministic from seed)
   // Mean = teamAverageRating, StdDev = 0.8, clamped to 0.1-5.0 range
   const carRatings = useMemo(() => {
-    const carCount = Math.min(trackSize, Math.floor(loop.length * 0.5))
+    const carCount = Math.min(trackSize, Math.floor(loop.length * 0.5), 20)
     if (carCount === 0) return []
 
     // Box-Muller transform for normal distribution
@@ -375,11 +377,12 @@ export function DeterministicRaceView({
   const { cars, start, stop, newRace } = useTrackCars({
     loop,
     width: mapSize,
-    carCount: Math.min(trackSize, Math.floor(loop.length * 0.5)),
+    carCount: Math.min(trackSize, Math.floor(loop.length * 0.5), 20),
     cellPx,
     gapPx: GRID_GAP,
     padPx: GRID_PAD,
     carRatings,
+    speedVariance,
   })
 
   const raceInitializedRef = useRef(false)

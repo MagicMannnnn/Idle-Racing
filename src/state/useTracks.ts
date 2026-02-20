@@ -93,7 +93,7 @@ function trackCostForIndex(index: number) {
   return Math.round(100 * Math.pow(10, index))
 }
 
-function tierMult(index: number) {
+export function tierMult(index: number) {
   return index === 0 ? 0.3 : 2 + Math.pow(4, Math.pow(index, 1.1)) * 2
 }
 

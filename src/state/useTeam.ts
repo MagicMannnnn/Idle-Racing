@@ -2,6 +2,7 @@ import { useEffect, useReducer } from 'react'
 import { Platform } from 'react-native'
 
 import { useMoney } from './useMoney'
+import { tierMult, useTracks } from './useTracks'
 
 const MAX_LEVEL = 100
 
@@ -54,6 +55,11 @@ export type ActiveTeamRace = {
   duration: number // minutes
   startedAt: number
   seed: number // for deterministic race simulation
+  // Optional fields set when race finishes
+  finishedAt?: number
+  position?: number
+  totalCars?: number
+  teamAverageRating?: number
 }
 
 export type RaceResult = {
@@ -63,6 +69,19 @@ export type RaceResult = {
   finishedAt: number
   position: number // 1-based, 1 = first place
   totalCars: number
+  seed: number // For deterministic replay
+  startedAt: number // When race started, for deterministic replay
+}
+
+export type LastTeamRace = {
+  trackId: string
+  trackName: string
+  duration: number
+  seed: number
+  startedAt: number
+  teamAverageRating: number
+  position: number
+  totalCars: number
 }
 
 type TeamState = {
@@ -71,6 +90,7 @@ type TeamState = {
   upgrades: CarUpgrade[]
   activeRace?: ActiveTeamRace
   lastRaceResult?: RaceResult
+  lastTeamRace?: LastTeamRace
 
   // HQ functions
   quoteHQUpgrade: () =>
@@ -96,7 +116,8 @@ type TeamState = {
     trackId: string,
     duration: number,
   ) => { ok: true } | { ok: false; reason: 'no_drivers' | 'already_racing' }
-  stopTeamRace: () => void
+  finishTeamRace: (position: number, totalCars: number, teamAverageRating: number) => void
+  clearTeamRace: () => void
   getActiveRace: () => ActiveTeamRace | undefined
 
   quoteDriver: (
@@ -179,7 +200,12 @@ function driverHireTime(rating: number) {
   return 20 + rating * 10 // 30s for 1-star, 70s for 5-star
 }
 
-function upgradeLevelCost(type: UpgradeType, fromLevel: number, toLevel: number) {
+function upgradeLevelCost(
+  type: UpgradeType,
+  fromLevel: number,
+  toLevel: number,
+  maxTrackIndex: number,
+) {
   const baseMultiplier = {
     engine: 1.5,
     transmission: 1.3,
@@ -189,25 +215,25 @@ function upgradeLevelCost(type: UpgradeType, fromLevel: number, toLevel: number)
     tires: 1.0,
   }[type]
 
+  // Use tierMult to scale with track progression, similar to track upgrades
+  const trackMult = tierMult(maxTrackIndex)
+
   let total = 0
   for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {
-    total +=
-      40 +
-      (baseMultiplier * Math.pow(lvl, 1.25) * 8 + Math.pow(lvl / 12, 3) * 120) *
-        (2 + Math.pow(4, Math.pow(lvl, 1.1)) * 2)
+    total += 30 + baseMultiplier * Math.pow(lvl, 1.55) * 6 * trackMult
   }
   return Math.round(total)
 }
 
-function upgradeTime(type: UpgradeType, fromLevel: number, toLevel: number) {
-  let total = 0
-  for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {
-    total += 15 + lvl * 5 // 20s, 25s, 30s, etc.
-  }
-  return total
+function upgradeTime(type: UpgradeType, fromLevel: number, _toLevel: number) {
+  // Fixed time based on current level, not multiplied by number of levels
+  // This makes bulk upgrades take the same time as single upgrades
+  const baseTime = 15
+  const levelScaling = fromLevel * 5
+  return baseTime + levelScaling
 }
 
-function tierCost(type: UpgradeType, tier: UpgradeTier) {
+function tierCost(type: UpgradeType, tier: UpgradeTier, maxTrackIndex: number) {
   const multipliers = {
     engine: 1.0,
     transmission: 0.9,
@@ -217,15 +243,19 @@ function tierCost(type: UpgradeType, tier: UpgradeTier) {
     tires: 1.0,
   }
 
+  // Scale tier unlock costs based on track progression
+  // Basic = track 0-1, Improved = track 2-3, Advanced = track 5-7, Elite = track 10-15, Ultimate = track 20+
   const baseCosts = {
     basic: 0, // starting tier
-    improved: 5000,
-    advanced: 50000,
-    elite: 500000,
-    ultimate: 5000000,
+    improved: 100,
+    advanced: 1000,
+    elite: 10000,
+    ultimate: 100000,
   }
 
-  return Math.floor(baseCosts[tier] * multipliers[type])
+  // Scale the cost based on current progression
+  const trackMult = tierMult(maxTrackIndex)
+  return Math.floor(baseCosts[tier] * multipliers[type] * trackMult)
 }
 
 function tierTime(tier: UpgradeTier) {
@@ -295,6 +325,7 @@ function createInitialState(): Omit<TeamState, keyof ReturnType<typeof createAct
     upgrades,
     activeRace: undefined,
     lastRaceResult: undefined,
+    lastTeamRace: undefined,
   }
 }
 
@@ -303,7 +334,12 @@ type Action =
   | { type: 'HIRE_DRIVER'; driver: Driver; cost: number; time: number; now: number }
   | { type: 'FIRE_DRIVER'; driverId: string }
   | { type: 'START_TEAM_RACE'; trackId: string; duration: number; now: number; seed: number }
-  | { type: 'STOP_TEAM_RACE'; result?: RaceResult }
+  | { type: 'FINISH_TEAM_RACE'; position: number; totalCars: number; teamAverageRating: number }
+  | { type: 'CLEAR_TEAM_RACE' }
+  | { type: 'STOP_TEAM_RACE'; result?: RaceResult; lastTeamRace?: LastTeamRace }
+  | { type: 'CLEAR_RACE_RESULT' }
+  | { type: 'SET_LAST_TEAM_RACE'; race: LastTeamRace }
+  | { type: 'CLEAR_LAST_TEAM_RACE' }
   | {
       type: 'UPGRADE_CAR'
       upgradeType: UpgradeType
@@ -371,6 +407,28 @@ function reducer(
           startedAt: action.now,
           seed: action.seed,
         },
+        lastTeamRace: undefined, // Clear previous race results when starting new race
+      }
+    }
+
+    case 'FINISH_TEAM_RACE': {
+      if (!state.activeRace) return state
+      return {
+        ...state,
+        activeRace: {
+          ...state.activeRace,
+          finishedAt: Date.now(),
+          position: action.position,
+          totalCars: action.totalCars,
+          teamAverageRating: action.teamAverageRating,
+        },
+      }
+    }
+
+    case 'CLEAR_TEAM_RACE': {
+      return {
+        ...state,
+        activeRace: undefined,
       }
     }
 
@@ -379,6 +437,28 @@ function reducer(
         ...state,
         activeRace: undefined,
         lastRaceResult: action.result,
+        lastTeamRace: action.lastTeamRace ?? state.lastTeamRace,
+      }
+    }
+
+    case 'CLEAR_RACE_RESULT': {
+      return {
+        ...state,
+        lastRaceResult: undefined,
+      }
+    }
+
+    case 'SET_LAST_TEAM_RACE': {
+      return {
+        ...state,
+        lastTeamRace: action.race,
+      }
+    }
+
+    case 'CLEAR_LAST_TEAM_RACE': {
+      return {
+        ...state,
+        lastTeamRace: undefined,
       }
     }
 
@@ -511,7 +591,8 @@ function reducer(
       })
 
       // Check if active race has ended (based on duration)
-      if (newState.activeRace) {
+      // Don't clear if race has already been finished (results need to persist)
+      if (newState.activeRace && !newState.activeRace.finishedAt) {
         const raceEndTime = newState.activeRace.startedAt + newState.activeRace.duration * 60 * 1000
         if (action.now >= raceEndTime) {
           newState.activeRace = undefined
@@ -676,7 +757,8 @@ function createActions(
         return { ok: false as const, reason: 'no_drivers' as const }
       }
 
-      if (state.activeRace) {
+      // Only prevent if there's an unfinished race in progress
+      if (state.activeRace && !state.activeRace.finishedAt) {
         return { ok: false as const, reason: 'already_racing' as const }
       }
 
@@ -687,8 +769,28 @@ function createActions(
       return { ok: true as const }
     },
 
-    stopTeamRace: () => {
-      dispatch({ type: 'STOP_TEAM_RACE' })
+    stopTeamRace: (result?: RaceResult, lastTeamRace?: LastTeamRace) => {
+      dispatch({ type: 'STOP_TEAM_RACE', result, lastTeamRace })
+    },
+
+    finishTeamRace: (position: number, totalCars: number, teamAverageRating: number) => {
+      dispatch({ type: 'FINISH_TEAM_RACE', position, totalCars, teamAverageRating })
+    },
+
+    clearTeamRace: () => {
+      dispatch({ type: 'CLEAR_TEAM_RACE' })
+    },
+
+    clearRaceResult: () => {
+      dispatch({ type: 'CLEAR_RACE_RESULT' })
+    },
+
+    setLastTeamRace: (race: LastTeamRace) => {
+      dispatch({ type: 'SET_LAST_TEAM_RACE', race })
+    },
+
+    clearLastTeamRace: () => {
+      dispatch({ type: 'CLEAR_LAST_TEAM_RACE' })
     },
 
     getActiveRace: () => {
@@ -711,6 +813,10 @@ function createActions(
         return { ok: false as const, reason: 'already_max' as const }
       }
 
+      // Get max track index for scaling costs
+      const tracks = useTracks.getState().tracks
+      const maxTrackIndex = tracks.length > 0 ? Math.max(0, tracks.length - 1) : 0
+
       const fromLevel = upgrade.level
       let toLevel = fromLevel
 
@@ -724,7 +830,7 @@ function createActions(
         let affordable = fromLevel
 
         for (let lvl = fromLevel + 1; lvl <= MAX_LEVEL; lvl++) {
-          const costToLevel = upgradeLevelCost(type, fromLevel, lvl)
+          const costToLevel = upgradeLevelCost(type, fromLevel, lvl, maxTrackIndex)
           if (costToLevel <= money) {
             affordable = lvl
           } else {
@@ -735,7 +841,7 @@ function createActions(
         toLevel = affordable
       }
 
-      const cost = upgradeLevelCost(type, fromLevel, toLevel)
+      const cost = upgradeLevelCost(type, fromLevel, toLevel, maxTrackIndex)
       const time = upgradeTime(type, fromLevel, toLevel)
 
       return {
@@ -798,7 +904,11 @@ function createActions(
         return { ok: false as const, reason: 'not_ready' as const }
       }
 
-      const cost = tierCost(type, tier)
+      // Get max track index for scaling costs
+      const tracks = useTracks.getState().tracks
+      const maxTrackIndex = tracks.length > 0 ? Math.max(0, tracks.length - 1) : 0
+
+      const cost = tierCost(type, tier, maxTrackIndex)
       const time = tierTime(tier)
 
       return {
