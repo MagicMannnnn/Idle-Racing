@@ -25,6 +25,8 @@ type UseTrackCarsOpts = {
   carHFrac?: number
   carWPx?: number
   carHPx?: number
+  carRatings?: number[] // Optional ratings (0.1-5.0) for each car, affects speed
+  speedVariance?: number // Optional speed variance override (default: from settings)
 }
 
 const dirToDeg = (d: Dir) => (d === 'N' ? 0 : d === 'E' ? 90 : d === 'S' ? 180 : 270)
@@ -222,11 +224,15 @@ export function useTrackCars({
   carHFrac = 1 / 4,
   carWPx,
   carHPx,
+  carRatings,
+  speedVariance: speedVarianceOverride,
 }: UseTrackCarsOpts) {
   const len = loop.length
   const maxCarCount = useSettings((s: any) => s.maxCarCount)
   const safeCarCount = Math.min(carCount, len, maxCarCount)
-  const variance = useSettings((s: any) => s.speedVariance) / 100
+  const settingsVariance = useSettings((s: any) => s.speedVariance)
+  const variance =
+    (speedVarianceOverride !== undefined ? speedVarianceOverride : settingsVariance) / 100
 
   const TUNE = useMemo(() => {
     return {
@@ -375,67 +381,82 @@ export function useTrackCars({
     return list && list.length ? list[list.length - 1] : 0
   }
 
-  const seedNewRaceRefs = useCallback(() => {
-    const ids = idsRef.current
-    if (ids.length !== safeCarCount || safeCarCount === 0 || len === 0) return
+  const seedNewRaceRefs = useCallback(
+    (customSeed?: number) => {
+      const ids = idsRef.current
+      if (ids.length !== safeCarCount || safeCarCount === 0 || len === 0) return
 
-    const rand = mulberry32(Date.now())
-    const packLen = Math.max(1, len * TUNE.packWindowFrac)
-    const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
-    const anchor = len - 1e-3
+      const rand = mulberry32(customSeed ?? Date.now())
+      const packLen = Math.max(1, len * TUNE.packWindowFrac)
+      const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
+      const anchor = len - 1e-3
 
-    const carIndices = Array.from({ length: safeCarCount }, (_, i) => i)
-    const shuffledIndices = shuffle(carIndices, rand)
+      const carIndices = Array.from({ length: safeCarCount }, (_, i) => i)
+      const shuffledIndices = shuffle(carIndices, rand)
 
-    for (let posIdx = 0; posIdx < safeCarCount; posIdx++) {
-      const i = shuffledIndices[posIdx]
-      const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
-      const base = TUNE.baseSpeed * variance2
+      for (let posIdx = 0; posIdx < safeCarCount; posIdx++) {
+        const i = shuffledIndices[posIdx]
+        const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
 
-      const jitter = (rand() * 2 - 1) * TUNE.packJitter
-      const s0 = (anchor - posIdx * spacing + jitter + len) % len
+        // Apply rating multiplier if ratings are provided
+        // Higher impact: rating gives 0.85-1.15x speed multiplier (max 30% difference)
+        // Formula: 0.85 + (rating / 5.0) * 0.3
+        // 5.0★ = 1.15x, 2.5★ = 1.0x, 0.1★ = 0.852x
+        const ratingMultiplier =
+          carRatings && carRatings[i] !== undefined ? 0.85 + (carRatings[i] / 5.0) * 0.3 : 1.0
 
-      sRef.current[i] = s0
-      vRef.current[i] = base
-      baseRef.current[i] = base
-      streakRef.current[i] = 0
+        const base = TUNE.baseSpeed * variance2 * ratingMultiplier
 
-      laneRef.current[i] = 0
-      sideRef.current[i] = 0
-      phaseRef.current[i] = 0
-      holdRef.current[i] = 0
-      overtakeTimeRef.current[i] = 0
+        const jitter = (rand() * 2 - 1) * TUNE.packJitter
+        const s0 = (anchor - posIdx * spacing + jitter + len) % len
 
-      posXRef.current[i] = 0
-      posYRef.current[i] = 0
-      rotRef.current[i] = 0
+        sRef.current[i] = s0
+        vRef.current[i] = base
+        baseRef.current[i] = base
+        streakRef.current[i] = 0
 
-      targetIdRef.current[i] = []
-      beingOvertakenRef.current[i] = 0
+        laneRef.current[i] = 0
+        sideRef.current[i] = 0
+        phaseRef.current[i] = 0
+        holdRef.current[i] = 0
+        overtakeTimeRef.current[i] = 0
 
-      lapsRef.current[i] = 0
+        posXRef.current[i] = 0
+        posYRef.current[i] = 0
+        rotRef.current[i] = 0
 
-      const carAnim = cars[i]
-      if (carAnim) {
-        carAnim.laps.value = 0
-        carAnim.progress.value = s0
+        targetIdRef.current[i] = []
+        beingOvertakenRef.current[i] = 0
+
+        lapsRef.current[i] = 0
+
+        const carAnim = cars[i]
+        if (carAnim) {
+          carAnim.laps.value = 0
+          carAnim.progress.value = s0
+        }
       }
-    }
-  }, [
-    TUNE.baseSpeed,
-    TUNE.packJitter,
-    TUNE.packWindowFrac,
-    TUNE.speedVariance,
-    cars,
-    len,
-    safeCarCount,
-  ])
+    },
+    [
+      TUNE.baseSpeed,
+      TUNE.packJitter,
+      TUNE.packWindowFrac,
+      TUNE.speedVariance,
+      cars,
+      len,
+      safeCarCount,
+      carRatings,
+    ],
+  )
 
-  const newRace = useCallback(() => {
-    stop()
-    seedNewRaceRefs()
-    didLayoutRef.current = false
-  }, [seedNewRaceRefs, stop])
+  const newRace = useCallback(
+    (customSeed?: number) => {
+      stop()
+      seedNewRaceRefs(customSeed)
+      didLayoutRef.current = false
+    },
+    [seedNewRaceRefs, stop],
+  )
 
   useEffect(() => {
     if (safeCarCount <= 0 || len <= 0) {
