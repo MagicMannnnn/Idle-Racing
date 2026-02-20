@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
+const CARD_WIDTH = Platform.OS === 'web' ? Math.min(380, SCREEN_WIDTH - 52) : SCREEN_WIDTH - 52
 
 // Pre-generated driver names to avoid flickering
 const DRIVER_NAMES = [
@@ -263,10 +264,11 @@ export default function DriversPage() {
             <ScrollView
               ref={scrollViewRef}
               horizontal
-              showsHorizontalScrollIndicator={false}
+              showsHorizontalScrollIndicator={Platform.OS === 'web'}
               contentContainerStyle={styles.carouselContent}
-              snapToInterval={SCREEN_WIDTH - 52}
+              snapToInterval={Platform.OS === 'web' ? undefined : CARD_WIDTH}
               decelerationRate="fast"
+              style={Platform.OS === 'web' ? { maxWidth: '100%' } : undefined}
             >
               {driverOptions.map((option, idx) => {
                 const quote = quoteDriver(option.rating)
@@ -491,9 +493,12 @@ const styles = StyleSheet.create({
   carouselContent: {
     paddingVertical: 8,
     gap: 16,
+    ...(Platform.OS === 'web' && {
+      flexDirection: 'row',
+    }),
   },
   carouselCard: {
-    width: SCREEN_WIDTH - 52,
+    width: CARD_WIDTH,
   },
   carouselCardInner: {
     borderRadius: 18,

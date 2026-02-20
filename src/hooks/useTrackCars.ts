@@ -25,6 +25,7 @@ type UseTrackCarsOpts = {
   carHFrac?: number
   carWPx?: number
   carHPx?: number
+  carRatings?: number[] // Optional ratings (0.1-5.0) for each car, affects speed
 }
 
 const dirToDeg = (d: Dir) => (d === 'N' ? 0 : d === 'E' ? 90 : d === 'S' ? 180 : 270)
@@ -222,6 +223,7 @@ export function useTrackCars({
   carHFrac = 1 / 4,
   carWPx,
   carHPx,
+  carRatings,
 }: UseTrackCarsOpts) {
   const len = loop.length
   const maxCarCount = useSettings((s: any) => s.maxCarCount)
@@ -391,7 +393,15 @@ export function useTrackCars({
       for (let posIdx = 0; posIdx < safeCarCount; posIdx++) {
         const i = shuffledIndices[posIdx]
         const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
-        const base = TUNE.baseSpeed * variance2
+
+        // Apply rating multiplier if ratings are provided
+        // Reduced impact: rating gives 0.85-1.15x speed multiplier (max 15% difference)
+        // Formula: 0.85 + (rating / 5.0) * 0.3
+        // 5.0★ = 1.15x, 2.5★ = 1.0x, 0.1★ = 0.856x
+        const ratingMultiplier =
+          carRatings && carRatings[i] !== undefined ? 0.85 + (carRatings[i] / 5.0) * 0.3 : 1.0
+
+        const base = TUNE.baseSpeed * variance2 * ratingMultiplier
 
         const jitter = (rand() * 2 - 1) * TUNE.packJitter
         const s0 = (anchor - posIdx * spacing + jitter + len) % len
@@ -431,6 +441,7 @@ export function useTrackCars({
       cars,
       len,
       safeCarCount,
+      carRatings,
     ],
   )
 

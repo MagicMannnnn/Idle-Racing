@@ -9,7 +9,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function RaceTab() {
   const activeRace = useTeam((s: any) => s.activeRace)
+  const lastRaceResult = useTeam((s: any) => s.lastRaceResult)
   const drivers = useTeam((s: any) => s.drivers)
+  const upgrades = useTeam((s: any) => s.upgrades)
   const stopTeamRace = useTeam((s: any) => s.stopTeamRace)
   const track = useTracks((s: any) => s.tracks.find((t: any) => t.id === activeRace?.trackId))
   const setCarName = useTrackMaps((s: any) => s.setCarName)
@@ -20,6 +22,14 @@ export default function RaceTab() {
     () => drivers.filter((d: any) => d.hiringProgress === undefined),
     [drivers],
   )
+
+  // Calculate team average rating for race distribution
+  const teamAverageRating = useMemo(() => {
+    if (hiredDrivers.length === 0 || upgrades.length === 0) return 2.5 // default middle rating
+    const driverRating = hiredDrivers[0].rating // use first driver's rating
+    const carRating = upgrades.reduce((sum: number, u: any) => sum + u.value, 0) / upgrades.length
+    return (driverRating + carRating) / 2
+  }, [hiredDrivers, upgrades])
 
   // Update current time every second for countdown
   useEffect(() => {
@@ -69,7 +79,33 @@ export default function RaceTab() {
   }, [track])
 
   const handleEndRace = () => {
-    stopTeamRace()
+    if (!activeRace || !track) return
+
+    // Calculate deterministic race position based on seed and team rating
+    // Use a simple hash to get a position based on performance
+    const performanceSeed = activeRace.seed ^ Math.floor(teamAverageRating * 1000)
+    const positionRandom = (performanceSeed % 1000) / 1000
+
+    // Better team rating = better position (with some randomness)
+    // Rating 5.0 = likely top 10%, Rating 2.5 = middle pack, Rating 1.0 = bottom 25%
+    const ratingFactor = teamAverageRating / 5.0 // 0.0 to 1.0
+    const combinedScore = ratingFactor * 0.7 + positionRandom * 0.3
+
+    const totalCars = Math.min(track.trackSize, 20)
+    const position = Math.max(
+      1,
+      Math.min(totalCars, Math.floor((1 - combinedScore) * totalCars) + 1),
+    )
+
+    stopTeamRace({
+      trackId: track.id,
+      trackName: track.name,
+      duration: activeRace.duration,
+      finishedAt: Date.now(),
+      position,
+      totalCars,
+    })
+
     router.replace('/(tabs)/team')
   }
 
@@ -77,8 +113,30 @@ export default function RaceTab() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.notFound}>
-          <Text style={styles.pageTitle}>No active race</Text>
-          <Text style={styles.pageSubtitle}>Start a race from My Team</Text>
+          {lastRaceResult ? (
+            <>
+              <Text style={styles.pageTitle}>Race Complete!</Text>
+              <View style={styles.resultCard}>
+                <Text style={styles.resultTrack}>{lastRaceResult.trackName}</Text>
+                <View style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>Position:</Text>
+                  <Text style={styles.resultValue}>
+                    {lastRaceResult.position} / {lastRaceResult.totalCars}
+                  </Text>
+                </View>
+                <View style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>Duration:</Text>
+                  <Text style={styles.resultValue}>{lastRaceResult.duration} minutes</Text>
+                </View>
+              </View>
+              <Text style={styles.pageSubtitle}>Start another race from My Team</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.pageTitle}>No active race</Text>
+              <Text style={styles.pageSubtitle}>Start a race from My Team</Text>
+            </>
+          )}
         </View>
       </SafeAreaView>
     )
@@ -138,6 +196,7 @@ export default function RaceTab() {
           seed={activeRace.seed}
           startedAt={activeRace.startedAt}
           durationMs={activeRace.duration * 60 * 1000}
+          teamAverageRating={teamAverageRating}
         />
       </View>
     </SafeAreaView>
@@ -236,5 +295,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  resultCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    marginVertical: 24,
+    gap: 16,
+    minWidth: 300,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  resultTrack: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0B0F14',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  resultLabel: {
+    fontSize: 15,
+    color: 'rgba(0,0,0,0.55)',
+    fontWeight: '600',
+  },
+  resultValue: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#0B0F14',
   },
 })

@@ -56,11 +56,21 @@ export type ActiveTeamRace = {
   seed: number // for deterministic race simulation
 }
 
+export type RaceResult = {
+  trackId: string
+  trackName: string
+  duration: number
+  finishedAt: number
+  position: number // 1-based, 1 = first place
+  totalCars: number
+}
+
 type TeamState = {
   hq: HQ
   drivers: Driver[]
   upgrades: CarUpgrade[]
   activeRace?: ActiveTeamRace
+  lastRaceResult?: RaceResult
 
   // HQ functions
   quoteHQUpgrade: () =>
@@ -284,6 +294,7 @@ function createInitialState(): Omit<TeamState, keyof ReturnType<typeof createAct
     drivers: [],
     upgrades,
     activeRace: undefined,
+    lastRaceResult: undefined,
   }
 }
 
@@ -292,7 +303,7 @@ type Action =
   | { type: 'HIRE_DRIVER'; driver: Driver; cost: number; time: number; now: number }
   | { type: 'FIRE_DRIVER'; driverId: string }
   | { type: 'START_TEAM_RACE'; trackId: string; duration: number; now: number; seed: number }
-  | { type: 'STOP_TEAM_RACE' }
+  | { type: 'STOP_TEAM_RACE'; result?: RaceResult }
   | {
       type: 'UPGRADE_CAR'
       upgradeType: UpgradeType
@@ -367,6 +378,7 @@ function reducer(
       return {
         ...state,
         activeRace: undefined,
+        lastRaceResult: action.result,
       }
     }
 

@@ -32,6 +32,7 @@ type Props = {
   seed: number
   startedAt: number
   durationMs: number
+  teamAverageRating: number // Average of driver and car rating (determines distribution mean)
 }
 
 const GRID_GAP = 1
@@ -268,6 +269,7 @@ export function DeterministicRaceView({
   seed,
   startedAt,
   durationMs,
+  teamAverageRating,
 }: Props) {
   const ensure = useTrackMaps((s: any) => s.ensure)
   const grid = useTrackMaps((s: any) => s.get(trackId))
@@ -337,6 +339,39 @@ export function DeterministicRaceView({
 
   const loop = useMemo(() => buildTrackLoop(cells ?? [], mapSize), [cells, mapSize])
 
+  // Generate car ratings using normal distribution (deterministic from seed)
+  // Mean = teamAverageRating, StdDev = 0.8, clamped to 0.1-5.0 range
+  const carRatings = useMemo(() => {
+    const carCount = Math.min(trackSize, Math.floor(loop.length * 0.5))
+    if (carCount === 0) return []
+
+    // Box-Muller transform for normal distribution
+    const ratings: number[] = []
+    let rng = mix32(seed ^ 0x9e3779b9) // Add variation to seed
+
+    const nextRandom = () => {
+      rng = mix32(rng)
+      return rng / 0xffffffff
+    }
+
+    for (let i = 0; i < carCount; i++) {
+      // Box-Muller transform to generate normal distribution
+      const u1 = nextRandom()
+      const u2 = nextRandom()
+      const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
+
+      // Scale to mean=teamAverageRating, stdDev=0.8
+      const stdDev = 0.8
+      const rating = teamAverageRating + z0 * stdDev
+
+      // Clamp to valid range 0.1-5.0
+      const clampedRating = Math.max(0.1, Math.min(5.0, rating))
+      ratings.push(clampedRating)
+    }
+
+    return ratings
+  }, [seed, trackSize, loop.length, teamAverageRating])
+
   const { cars, start, stop, newRace } = useTrackCars({
     loop,
     width: mapSize,
@@ -344,6 +379,7 @@ export function DeterministicRaceView({
     cellPx,
     gapPx: GRID_GAP,
     padPx: GRID_PAD,
+    carRatings,
   })
 
   const raceInitializedRef = useRef(false)
