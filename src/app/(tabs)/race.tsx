@@ -89,13 +89,14 @@ export default function RaceTab() {
     return () => clearInterval(interval)
   }, [activeRace])
 
-  // Set the first car's name to the team driver's name (only once)
+  // Set car names and numbers for all team drivers
   useEffect(() => {
     if (hiredDrivers.length > 0 && activeRace) {
-      const firstDriver = hiredDrivers[0]
-      setCarName(0, firstDriver.name, 1)
+      hiredDrivers.forEach((driver: any, idx: number) => {
+        setCarName(idx, driver.name, driver.number)
+      })
     }
-  }, [activeRace?.trackId]) // Only update when race track changes
+  }, [activeRace?.trackId, hiredDrivers, setCarName])
 
   // Calculate time remaining
   const timeRemaining = useMemo(() => {
@@ -181,7 +182,7 @@ export default function RaceTab() {
       const teamDriver =
         isTeam && driverIndex < hiredDrivers.length ? hiredDrivers[driverIndex] : null
       const name = teamDriver
-        ? teamDriver.name
+        ? `${teamDriver.name} #${teamDriver.number}`
         : `${carNames[car.id - 1] || 'Car'} #${displayNumber}`
 
       // Calculate gap (same logic as TrackLeaderboard)
