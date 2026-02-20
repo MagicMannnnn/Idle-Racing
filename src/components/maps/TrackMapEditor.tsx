@@ -1,7 +1,15 @@
 import type { CellType } from '@state/useTrackMaps'
 import { useTrackMaps } from '@state/useTrackMaps'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 type Props = {
@@ -226,105 +234,216 @@ export function TrackMapEditor({ trackId, initialGridSize = 5, onSaved }: Props)
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-      <View
-        style={{
-          flex: 1,
-          flexDirection: isLandscape ? 'row' : 'column',
-          alignSelf: 'center',
-          gap: 12,
-          alignItems: isLandscape ? 'flex-start' : 'center',
-          justifyContent: 'center',
-          paddingHorizontal: 12,
-          paddingVertical: 24,
-        }}
-      >
-        <View style={{ width: wrapW, alignSelf: 'center' }}>
+    <SafeAreaView style={styles.safe} edges={isWeb ? ['top', 'left', 'right', 'bottom'] : []}>
+      {isWeb ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingVertical: isLandscape ? 24 : 12,
+            paddingHorizontal: 12,
+          }}
+          showsVerticalScrollIndicator={!isLandscape}
+        >
           <View
-            style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={onStart}
-            onResponderMove={onMove}
-            onResponderRelease={onEnd}
-            onResponderTerminate={onEnd}
+            style={{
+              flex: isLandscape ? 1 : undefined,
+              flexDirection: isLandscape ? 'row' : 'column',
+              alignSelf: 'center',
+              gap: 12,
+              alignItems: isLandscape ? 'flex-start' : 'center',
+              justifyContent: isLandscape ? 'center' : 'flex-start',
+            }}
           >
-            {Array.from({ length: mapSize * mapSize }).map((_, i) => {
-              const x = i % mapSize
-              const y = Math.floor(i / mapSize)
-              const type = (draftCells[i] ?? 'infield') as CellType
+            <View style={{ width: wrapW, alignSelf: 'center' }}>
+              <View
+                style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onResponderGrant={onStart}
+                onResponderMove={onMove}
+                onResponderRelease={onEnd}
+                onResponderTerminate={onEnd}
+              >
+                {Array.from({ length: mapSize * mapSize }).map((_, i) => {
+                  const x = i % mapSize
+                  const y = Math.floor(i / mapSize)
+                  const type = (draftCells[i] ?? 'infield') as CellType
 
-              return (
-                <View
-                  key={`${trackId}_${i}`}
-                  pointerEvents="none"
-                  style={[
-                    styles.cell,
-                    {
-                      width: cellPx,
-                      height: cellPx,
-                      marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
-                      marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
-                    },
-                    type === 'infield' && styles.grass,
-                    type === 'track' && styles.track,
-                    type === 'empty' && styles.standAreaWhite,
-                    type === 'stand' && styles.standMarker,
-                  ]}
-                />
-              )
-            })}
-          </View>
-        </View>
-
-        <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
-          <View style={styles.controlsPanel}>
-            <Text style={styles.title}>Edit Track</Text>
-
-            <View style={styles.toolsRow}>
-              <BrushButton
-                label="Track"
-                active={brush === 'track'}
-                onPress={() => setBrush('track')}
-              />
-              <BrushButton
-                label="Stand area"
-                active={brush === 'standArea'}
-                onPress={() => setBrush('standArea')}
-              />
-              <BrushButton
-                label="Grass"
-                active={brush === 'grass'}
-                onPress={() => setBrush('grass')}
-              />
+                  return (
+                    <View
+                      key={`${trackId}_${i}`}
+                      pointerEvents="none"
+                      style={[
+                        styles.cell,
+                        {
+                          width: cellPx,
+                          height: cellPx,
+                          marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
+                          marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+                        },
+                        type === 'infield' && styles.grass,
+                        type === 'track' && styles.track,
+                        type === 'empty' && styles.standAreaWhite,
+                        type === 'stand' && styles.standMarker,
+                      ]}
+                    />
+                  )
+                })}
+              </View>
             </View>
 
-            <Pressable
-              onPress={onClear}
-              style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.clearBtnText}>Clear All</Text>
-            </Pressable>
+            <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
+              <View style={styles.controlsPanel}>
+                <Text style={styles.title}>Edit Track</Text>
 
-            <Text style={styles.helper}>
-              Drag to draw • Stand-area tiles (white):{' '}
-              <Text style={styles.helperStrong}>{standAreaCount}</Text> / {MIN_STAND_AREA_TILES}{' '}
-              minimum • Track must be 1 closed loop
-            </Text>
+                <View style={styles.toolsRow}>
+                  <BrushButton
+                    label="Track"
+                    active={brush === 'track'}
+                    onPress={() => setBrush('track')}
+                  />
+                  <BrushButton
+                    label="Stand area"
+                    active={brush === 'standArea'}
+                    onPress={() => setBrush('standArea')}
+                  />
+                  <BrushButton
+                    label="Grass"
+                    active={brush === 'grass'}
+                    onPress={() => setBrush('grass')}
+                  />
+                </View>
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Pressable
+                  onPress={onClear}
+                  style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
+                >
+                  <Text style={styles.clearBtnText}>Clear All</Text>
+                </Pressable>
 
-            <Pressable
-              onPress={onSave}
-              style={({ pressed }) => [styles.saveBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.saveBtnText}>Save</Text>
-            </Pressable>
+                <Text style={styles.helper}>
+                  Drag to draw • Stand-area tiles (white):{' '}
+                  <Text style={styles.helperStrong}>{standAreaCount}</Text> / {MIN_STAND_AREA_TILES}{' '}
+                  minimum • Track must be 1 closed loop
+                </Text>
 
-            <Text style={styles.note}>Edits are local until you press Save.</Text>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+
+                <Pressable
+                  onPress={onSave}
+                  style={({ pressed }) => [styles.saveBtn, pressed && styles.pressed]}
+                >
+                  <Text style={styles.saveBtnText}>Save</Text>
+                </Pressable>
+
+                <Text style={styles.note}>Edits are local until you press Save.</Text>
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View
+            style={{
+              flexDirection: isLandscape ? 'row' : 'column',
+              alignSelf: 'center',
+              gap: 12,
+              alignItems: isLandscape ? 'flex-start' : 'center',
+            }}
+          >
+            <View style={{ width: wrapW, alignSelf: 'center' }}>
+              <View
+                style={[styles.wrap, { width: wrapW, height: wrapW, padding: GRID_PAD }]}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onResponderGrant={onStart}
+                onResponderMove={onMove}
+                onResponderRelease={onEnd}
+                onResponderTerminate={onEnd}
+              >
+                {Array.from({ length: mapSize * mapSize }).map((_, i) => {
+                  const x = i % mapSize
+                  const y = Math.floor(i / mapSize)
+                  const type = (draftCells[i] ?? 'infield') as CellType
+
+                  return (
+                    <View
+                      key={`${trackId}_${i}`}
+                      pointerEvents="none"
+                      style={[
+                        styles.cell,
+                        {
+                          width: cellPx,
+                          height: cellPx,
+                          marginRight: x === mapSize - 1 ? 0 : GRID_GAP,
+                          marginBottom: y === mapSize - 1 ? 0 : GRID_GAP,
+                        },
+                        type === 'infield' && styles.grass,
+                        type === 'track' && styles.track,
+                        type === 'empty' && styles.standAreaWhite,
+                        type === 'stand' && styles.standMarker,
+                      ]}
+                    />
+                  )
+                })}
+              </View>
+            </View>
+
+            <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
+              <View style={styles.controlsPanel}>
+                <Text style={styles.title}>Edit Track</Text>
+
+                <View style={styles.toolsRow}>
+                  <BrushButton
+                    label="Track"
+                    active={brush === 'track'}
+                    onPress={() => setBrush('track')}
+                  />
+                  <BrushButton
+                    label="Stand area"
+                    active={brush === 'standArea'}
+                    onPress={() => setBrush('standArea')}
+                  />
+                  <BrushButton
+                    label="Grass"
+                    active={brush === 'grass'}
+                    onPress={() => setBrush('grass')}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={onClear}
+                  style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
+                >
+                  <Text style={styles.clearBtnText}>Clear All</Text>
+                </Pressable>
+
+                <Text style={styles.helper}>
+                  Drag to draw • Stand-area tiles (white):{' '}
+                  <Text style={styles.helperStrong}>{standAreaCount}</Text> / {MIN_STAND_AREA_TILES}{' '}
+                  minimum • Track must be 1 closed loop
+                </Text>
+
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+
+                <Pressable
+                  onPress={onSave}
+                  style={({ pressed }) => [styles.saveBtn, pressed && styles.pressed]}
+                >
+                  <Text style={styles.saveBtnText}>Save</Text>
+                </Pressable>
+
+                <Text style={styles.note}>Edits are local until you press Save.</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   )
 }
@@ -347,6 +466,12 @@ function BrushButton(props: { label: string; active: boolean; onPress: () => voi
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   controlsPanel: { gap: 12 },
   title: { fontSize: 18, fontWeight: '900', color: '#0B0F14' },
 
