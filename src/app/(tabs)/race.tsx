@@ -147,12 +147,17 @@ export default function RaceTab() {
     // Sort by progress (same as TrackLeaderboard)
     carsWithProgress.sort((a, b) => b.progress - a.progress)
 
-    // Determine which car is the team's (first car ID 1)
-    const teamCarId = 1
-    const teamPosition = carsWithProgress.findIndex((car) => car.id === teamCarId) + 1
+    // Map driver numbers to team cars (car IDs 1, 2, 3, etc. match first, second, third driver)
+    const teamCarIds = new Set(hiredDrivers.map((_: any, idx: number) => idx + 1))
 
-    // Get team driver name
-    const teamDriverName = hiredDrivers.length > 0 ? hiredDrivers[0].name : 'Your Team'
+    // Find best team position
+    let bestTeamPosition = carsWithProgress.length + 1
+    for (let idx = 0; idx < carsWithProgress.length; idx++) {
+      if (teamCarIds.has(carsWithProgress[idx].id)) {
+        bestTeamPosition = Math.min(bestTeamPosition, idx + 1)
+      }
+    }
+    const teamPosition = bestTeamPosition <= carsWithProgress.length ? bestTeamPosition : 1
 
     // Create results with names, laps, and gaps
     const usedNumbers = new Set<number>()
@@ -170,8 +175,14 @@ export default function RaceTab() {
       }
       usedNumbers.add(displayNumber)
 
-      const isTeam = car.id === teamCarId
-      const name = isTeam ? teamDriverName : `${carNames[car.id - 1] || 'Car'} #${displayNumber}`
+      // Check if this car ID corresponds to a team driver
+      const isTeam = teamCarIds.has(car.id)
+      const driverIndex = car.id - 1
+      const teamDriver =
+        isTeam && driverIndex < hiredDrivers.length ? hiredDrivers[driverIndex] : null
+      const name = teamDriver
+        ? teamDriver.name
+        : `${carNames[car.id - 1] || 'Car'} #${displayNumber}`
 
       // Calculate gap (same logic as TrackLeaderboard)
       const gap = idx === 0 ? 0 : prevProgress - car.progress

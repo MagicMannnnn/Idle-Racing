@@ -12,6 +12,7 @@ export type Driver = {
   id: string
   name: string
   rating: number // 1-5 stars
+  number: number // Driver's racing number (1-100)
   hiredAt: number
   hiringProgress?: number // 0-1 if currently hiring
   hiringStartedAt?: number
@@ -134,6 +135,7 @@ type TeamState = {
   hireDriver: (
     name: string,
     rating: number,
+    number?: number,
   ) =>
     | { ok: true; driver: Driver; cost: number; time: number }
     | { ok: false; reason: 'slots_full' | 'not_enough_money' | 'rating_too_high' }
@@ -715,7 +717,7 @@ function createActions(
       }
     },
 
-    hireDriver: (name: string, rating: number) => {
+    hireDriver: (name: string, rating: number, number?: number) => {
       const quote = createActions(dispatch, getState).quoteDriver(rating)
       if (!quote.ok) return quote
 
@@ -726,10 +728,14 @@ function createActions(
         return { ok: false as const, reason: 'not_enough_money' as const }
       }
 
+      // Generate random number 1-100 if not provided
+      const driverNumber = number ?? Math.floor(Math.random() * 100) + 1
+
       const driver: Driver = {
         id: `driver-${Date.now()}-${Math.random()}`,
         name,
         rating,
+        number: driverNumber,
         hiredAt: Date.now(),
         cost,
       }

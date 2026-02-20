@@ -88,6 +88,9 @@ function DriverCard({ driver, onFire }: { driver: Driver; onFire: () => void }) 
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
+        <View style={styles.driverNumber}>
+          <Text style={styles.driverNumberText}>#{driver.number}</Text>
+        </View>
         <Text style={styles.cardTitle}>{driver.name}</Text>
         {!isHiring && (
           <Pressable
@@ -158,6 +161,7 @@ export default function DriversPage() {
 
   const [showHireCarousel, setShowHireCarousel] = useState(false)
   const [customName, setCustomName] = useState('')
+  const [driverNumber, setDriverNumber] = useState<string>('')
   const scrollViewRef = useRef<ScrollView>(null)
 
   // Generate 5 random driver options (memoized to avoid regeneration)
@@ -179,6 +183,13 @@ export default function DriversPage() {
     return options
   }, [showHireCarousel]) // Only regenerate when carousel is opened
 
+  // Set random driver number when carousel opens
+  useEffect(() => {
+    if (showHireCarousel && !driverNumber) {
+      setDriverNumber(String(Math.floor(Math.random() * 100) + 1))
+    }
+  }, [showHireCarousel])
+
   // Tick every 100ms to update progress bars
   useEffect(() => {
     const interval = setInterval(() => {
@@ -193,8 +204,11 @@ export default function DriversPage() {
 
   const handleHire = (option: DriverOption, useCustomName: boolean = false) => {
     const name = useCustomName && customName.trim() ? customName.trim() : option.name
+    const number = driverNumber
+      ? Math.max(1, Math.min(100, parseInt(driverNumber) || 1))
+      : undefined
 
-    const result = hireDriver(name, option.rating)
+    const result = hireDriver(name, option.rating, number)
     if (!result.ok) {
       if (result.reason === 'not_enough_money') {
         alert('Not enough money!')
@@ -208,6 +222,7 @@ export default function DriversPage() {
 
     setShowHireCarousel(false)
     setCustomName('')
+    setDriverNumber('')
   }
 
   const handleFire = (driverId: string, driverName: string) => {
@@ -292,6 +307,29 @@ export default function DriversPage() {
                           placeholder="Leave blank to use suggested"
                           placeholderTextColor="rgba(255,255,255,0.40)"
                         />
+                      </View>
+
+                      <View style={styles.customNameSection}>
+                        <Text style={styles.customNameLabel}>Driver number (1-100):</Text>
+                        <View style={styles.numberInputRow}>
+                          <TextInput
+                            style={[styles.customNameInput, styles.numberInput]}
+                            value={driverNumber}
+                            onChangeText={setDriverNumber}
+                            placeholder="Auto"
+                            placeholderTextColor="rgba(255,255,255,0.40)"
+                            keyboardType="numeric"
+                            maxLength={3}
+                          />
+                          <Pressable
+                            style={styles.randomBtn}
+                            onPress={() =>
+                              setDriverNumber(String(Math.floor(Math.random() * 100) + 1))
+                            }
+                          >
+                            <Ionicons name="shuffle" size={18} color="#FFFFFF" />
+                          </Pressable>
+                        </View>
                       </View>
 
                       <View style={styles.carouselStats}>
@@ -389,6 +427,20 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', flex: 1 },
+
+  driverNumber: {
+    backgroundColor: '#F5C542',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    minWidth: 42,
+    alignItems: 'center',
+  },
+  driverNumberText: {
+    color: '#1a1a1a',
+    fontSize: 14,
+    fontWeight: '900',
+  },
 
   fireBtn: {
     padding: 8,
@@ -545,6 +597,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  numberInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  numberInput: {
+    flex: 1,
+  },
+  randomBtn: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.20)',
+    borderRadius: 10,
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   carouselStats: {
