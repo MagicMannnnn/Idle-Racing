@@ -89,6 +89,16 @@ export type LastTeamRace = {
   meanCompetitorRating: number
 }
 
+export type TeamRaceLeaderboardEntry = {
+  position: number
+  rating: number
+  isTeam: boolean
+  name: string
+  laps: number
+  gap: number
+  knowledgePoints: number
+}
+
 type TeamState = {
   hq: HQ
   drivers: Driver[]
@@ -96,6 +106,7 @@ type TeamState = {
   activeRace?: ActiveTeamRace
   lastRaceResult?: RaceResult
   lastTeamRace?: LastTeamRace
+  lastLeaderboardResults?: TeamRaceLeaderboardEntry[]
   meanCompetitorRating: number // Starts at 1.0, adjusts based on performance
 
   // HQ functions
@@ -129,6 +140,7 @@ type TeamState = {
     teamAverageRating: number,
     earnedPrestige: boolean,
     knowledgeAwarded?: boolean,
+    leaderboardResults?: TeamRaceLeaderboardEntry[],
   ) => void
   clearTeamRace: () => void
   getActiveRace: () => ActiveTeamRace | undefined
@@ -354,6 +366,7 @@ function createInitialState(): Omit<TeamState, keyof ReturnType<typeof createAct
     activeRace: undefined,
     lastRaceResult: undefined,
     lastTeamRace: undefined,
+    lastLeaderboardResults: undefined,
     meanCompetitorRating: 1.0, // Starts at 1.0
   }
 }
@@ -377,6 +390,7 @@ type Action =
       teamAverageRating: number
       earnedPrestige: boolean
       knowledgeAwarded?: boolean
+      leaderboardResults?: TeamRaceLeaderboardEntry[]
     }
   | { type: 'CLEAR_TEAM_RACE' }
   | { type: 'STOP_TEAM_RACE'; result?: RaceResult; lastTeamRace?: LastTeamRace }
@@ -462,19 +476,20 @@ function reducer(
       let newMeanRating = state.meanCompetitorRating
       const maxRating = state.hq.maxDriverRating - 0.5
 
-      if (action.earnedPrestige) {
-        // Increase difficulty by 0.05-0.1
-        const increase = 0.05 + Math.random() * 0.05
+      if (action.position === 1) {
+        // Won the race - increase difficulty by 0.1-0.2
+        const increase = 0.1 + Math.random() * 0.1
         newMeanRating = Math.min(maxRating, newMeanRating + increase)
       } else {
-        // Decrease difficulty by 0.05-0.1
-        const decrease = 0.05 + Math.random() * 0.05
+        // Didn't win - decrease difficulty by 0.01-0.03
+        const decrease = 0.01 + Math.random() * 0.02
         newMeanRating = Math.max(1.0, newMeanRating - decrease)
       }
 
       return {
         ...state,
         meanCompetitorRating: newMeanRating,
+        lastLeaderboardResults: action.leaderboardResults ?? state.lastLeaderboardResults,
         activeRace: {
           ...state.activeRace,
           finishedAt: Date.now(),
@@ -654,17 +669,7 @@ function reducer(
       // Check if active race has ended (based on duration)
       // Don't clear if race has already been finished (results need to persist)
       // Add grace period after finishedAt is set to allow results to be viewed
-      if (newState.activeRace && !newState.activeRace.finishedAt) {
-        const raceEndTime = newState.activeRace.startedAt + newState.activeRace.duration * 60 * 1000
-        if (action.now >= raceEndTime) {
-          // Race time has expired but not marked as finished
-          // Clear it after a grace period to allow handleEndRace to complete
-          const gracePeriod = 5000 // 5 second grace period
-          if (action.now >= raceEndTime + gracePeriod) {
-            newState.activeRace = undefined
-          }
-        }
-      } else if (newState.activeRace && newState.activeRace.finishedAt) {
+      if (newState.activeRace && newState.activeRace.finishedAt) {
         // Race is finished - allow results to persist for viewing
         // Clear after 5 minutes to prevent stale data
         const resultsPersistTime = 300000
@@ -894,6 +899,7 @@ function createActions(
       teamAverageRating: number,
       earnedPrestige: boolean,
       knowledgeAwarded?: boolean,
+      leaderboardResults?: TeamRaceLeaderboardEntry[],
     ) => {
       dispatch({
         type: 'FINISH_TEAM_RACE',
@@ -902,6 +908,7 @@ function createActions(
         teamAverageRating,
         earnedPrestige,
         knowledgeAwarded,
+        leaderboardResults,
       })
     },
 

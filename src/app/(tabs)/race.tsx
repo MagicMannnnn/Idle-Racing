@@ -1,21 +1,21 @@
 import { DeterministicRaceView } from '@components/maps/DeterministicRaceView'
 import type { CarAnim } from '@hooks/useTrackCars'
 import { usePrestige } from '@state/usePrestige'
-import { useTeam } from '@state/useTeam'
+import { type TeamRaceLeaderboardEntry, useTeam } from '@state/useTeam'
 import { useTrackMaps } from '@state/useTrackMaps'
 import { useTracks } from '@state/useTracks'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-type RaceResultEntry = {
-  position: number
-  rating: number
-  isTeam: boolean
-  name: string
-  laps: number
-  gap: number
-  knowledgePoints: number
+type RaceResultEntry = TeamRaceLeaderboardEntry
+
+function createSeededRng(seed: number) {
+  let state = seed >>> 0
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 0x100000000
+  }
 }
 
 // Calculate knowledge points based on position and total cars
@@ -42,6 +42,7 @@ export default function RaceTab() {
   const activeRace = useTeam((s: any) => s.activeRace)
   const drivers = useTeam((s: any) => s.drivers)
   const upgrades = useTeam((s: any) => s.upgrades)
+  const lastLeaderboardResults = useTeam((s: any) => s.lastLeaderboardResults)
   const finishTeamRace = useTeam((s: any) => s.finishTeamRace)
   const getMeanCompetitorRating = useTeam((s: any) => s.getMeanCompetitorRating)
   const allTracks = useTracks((s: any) => s.tracks)
@@ -136,87 +137,151 @@ export default function RaceTab() {
     return track.index < 2 ? 5 + track.index * 2 : 6 + track.index
   }, [track])
 
+  const fallbackResults = useCallback((): RaceResultEntry[] => {
+    if (!activeRace) return []
+
+    const rng = createSeededRng(activeRace.seed ^ 0x5f3759df)
+    const teamCount = Math.max(1, hiredDrivers.length)
+    const totalCars = Math.max(initialGridSize, teamCount)
+    const meanRating = activeRace.meanCompetitorRating || getMeanCompetitorRating() || 1.0
+    const minRating = 0.5
+    const maxRating = Math.min(meanRating * 2, 5.0)
+    const estimatedLaps = Math.max(1, Math.round(activeRace.duration / 8))
+
+    const participants = Array.from({ length: totalCars }, (_, idx) => {
+      const id = idx + 1
+      const isTeam = idx < teamCount
+      const baseRating = isTeam
+        ? (teamDriverRatings[idx] ?? teamAverageRating)
+        : (() => {
+            const centered = (rng() + rng() + rng() + rng() - 2) * 0.25
+            const raw = meanRating + centered
+            return Math.max(minRating, Math.min(maxRating, raw))
+          })()
+      const noise = (rng() * 2 - 1) * 0.12
+      const score = baseRating + noise
+      const laps = Math.max(0, Math.round(estimatedLaps + (rng() * 2 - 1)))
+
+      const carNumber = carNumbers[idx]
+      const driver = hiredDrivers[idx]
+      const displayName =
+        isTeam && driver
+          ? `${driver.name} #${driver.number}`
+          : `${carNames[idx] || 'Car'} #${carNumber ?? id}`
+
+      return {
+        id,
+        isTeam,
+        rating: baseRating,
+        score,
+        laps,
+        name: displayName,
+      }
+    })
+
+    participants.sort((a, b) => b.score - a.score)
+
+    let previousScore = participants[0]?.score ?? 0
+    return participants.map((participant, idx) => {
+      const gap = idx === 0 ? 0 : Math.max(0.1, previousScore - participant.score)
+      previousScore = participant.score
+      return {
+        position: idx + 1,
+        rating: participant.rating,
+        isTeam: participant.isTeam,
+        name: participant.name,
+        laps: participant.laps,
+        gap,
+        knowledgePoints: calculateKnowledgePoints(idx + 1, participants.length),
+      }
+    })
+  }, [
+    activeRace,
+    hiredDrivers,
+    initialGridSize,
+    getMeanCompetitorRating,
+    teamDriverRatings,
+    teamAverageRating,
+    carNumbers,
+    carNames,
+  ])
+
   const handleEndRace = useCallback(() => {
     if (!activeRace || !track || activeRace.finishedAt) return
 
     // Get the actual car positions from the live race
     const cars = latestCarsRef.current
-    const ratings = latestCarRatingsRef.current
-    if (cars.length === 0) return
+    let results: RaceResultEntry[] = []
 
-    // Convert cars to sortable format (read SharedValue.value)
-    const carsWithProgress = cars.map((car) => ({
-      id: car.id,
-      laps: Math.max(0, Math.floor(car.laps.value || 0)),
-      progress: car.progress.value || 0,
-      colorHex: car.colorHex,
-    }))
+    if (cars.length === 0) {
+      results = fallbackResults()
+    } else {
+      // Convert cars to sortable format (read SharedValue.value)
+      const carsWithProgress = cars.map((car) => ({
+        id: car.id,
+        laps: Math.max(0, Math.floor(car.laps.value || 0)),
+        progress: car.progress.value || 0,
+      }))
 
-    // Sort by progress (same as TrackLeaderboard)
-    carsWithProgress.sort((a, b) => b.progress - a.progress)
+      // Sort by progress (same as TrackLeaderboard)
+      carsWithProgress.sort((a, b) => b.progress - a.progress)
 
-    // Map driver numbers to team cars (car IDs 1, 2, 3, etc. match first, second, third driver)
-    const teamCarIds = new Set(hiredDrivers.map((_: any, idx: number) => idx + 1))
+      // Map driver numbers to team cars (car IDs 1, 2, 3, etc. match first, second, third driver)
+      const teamCarIds = new Set(hiredDrivers.map((_: any, idx: number) => idx + 1))
 
-    // Find best team position
-    let bestTeamPosition = carsWithProgress.length + 1
-    for (let idx = 0; idx < carsWithProgress.length; idx++) {
-      if (teamCarIds.has(carsWithProgress[idx].id)) {
-        bestTeamPosition = Math.min(bestTeamPosition, idx + 1)
-      }
-    }
-    const teamPosition = bestTeamPosition <= carsWithProgress.length ? bestTeamPosition : 1
-
-    // Create results with names, laps, and gaps
-    const usedNumbers = new Set<number>()
-    let prevProgress = 0
-    const results: RaceResultEntry[] = carsWithProgress.map((car, idx) => {
-      const carNumber = carNumbers[car.id - 1]
-      let displayNumber: number
-      if (carNumber !== undefined) {
-        displayNumber = carNumber
-      } else {
-        displayNumber = car.id
-        while (usedNumbers.has(displayNumber)) {
-          displayNumber++
+      // Create results with names, laps, and gaps
+      const usedNumbers = new Set<number>()
+      let prevProgress = 0
+      results = carsWithProgress.map((car, idx) => {
+        const carNumber = carNumbers[car.id - 1]
+        let displayNumber: number
+        if (carNumber !== undefined) {
+          displayNumber = carNumber
+        } else {
+          displayNumber = car.id
+          while (usedNumbers.has(displayNumber)) {
+            displayNumber++
+          }
         }
-      }
-      usedNumbers.add(displayNumber)
+        usedNumbers.add(displayNumber)
 
-      // Check if this car ID corresponds to a team driver
-      const isTeam = teamCarIds.has(car.id)
-      const driverIndex = car.id - 1
-      const teamDriver =
-        isTeam && driverIndex < hiredDrivers.length ? hiredDrivers[driverIndex] : null
-      const name = teamDriver
-        ? `${teamDriver.name} #${teamDriver.number}`
-        : `${carNames[car.id - 1] || 'Car'} #${displayNumber}`
+        const isTeam = teamCarIds.has(car.id)
+        const driverIndex = car.id - 1
+        const teamDriver =
+          isTeam && driverIndex < hiredDrivers.length ? hiredDrivers[driverIndex] : null
+        const name = teamDriver
+          ? `${teamDriver.name} #${teamDriver.number}`
+          : `${carNames[car.id - 1] || 'Car'} #${displayNumber}`
 
-      // Calculate gap (same logic as TrackLeaderboard)
-      const gap = idx === 0 ? 0 : prevProgress - car.progress
-      prevProgress = car.progress
+        const gap = idx === 0 ? 0 : prevProgress - car.progress
+        prevProgress = car.progress
 
-      // Calculate knowledge points reward
-      const knowledgePoints = calculateKnowledgePoints(idx + 1, carsWithProgress.length)
+        const knowledgePoints = calculateKnowledgePoints(idx + 1, carsWithProgress.length)
+        const carRating = latestCarRatingsRef.current[car.id - 1] || 0
 
-      // Get car rating from stored ratings array
-      const carRating = latestCarRatingsRef.current[car.id - 1] || 0
+        return {
+          position: idx + 1,
+          rating: carRating,
+          isTeam,
+          name,
+          laps: car.laps,
+          gap,
+          knowledgePoints,
+        }
+      })
+    }
 
-      return {
-        position: idx + 1,
-        rating: carRating,
-        isTeam,
-        name,
-        laps: car.laps,
-        gap,
-        knowledgePoints,
-      }
-    })
+    if (results.length === 0) return
+
+    const teamPosition = Math.min(
+      ...results.filter((result) => result.isTeam).map((result) => result.position),
+    )
 
     // Store results for display
     setRaceResults(results)
 
     // Award knowledge points to team driver if not already awarded
+    let knowledgeAwarded = false
     if (!activeRace.knowledgeAwarded) {
       const teamResult = results.find((r) => r.isTeam)
       if (teamResult && teamResult.knowledgePoints > 0) {
@@ -226,13 +291,22 @@ export default function RaceTab() {
         const prestigeMultiplier = Math.pow(2, (meanRating - 1.5) / 0.5)
         const scaledKnowledge = Math.round(teamResult.knowledgePoints * prestigeMultiplier)
         addKnowledge(scaledKnowledge)
+        knowledgeAwarded = true
       }
     }
 
     // Finish race by adding result data to activeRace
-    finishTeamRace(teamPosition, carsWithProgress.length, teamAverageRating, true)
+    finishTeamRace(
+      Number.isFinite(teamPosition) ? teamPosition : 1,
+      results.length,
+      teamAverageRating,
+      true,
+      knowledgeAwarded,
+      results,
+    )
   }, [
     activeRace,
+    fallbackResults,
     track,
     teamAverageRating,
     finishTeamRace,
@@ -241,6 +315,8 @@ export default function RaceTab() {
     carNumbers,
     addKnowledge,
   ])
+
+  const displayResults: RaceResultEntry[] | null = raceResults ?? lastLeaderboardResults ?? null
 
   // Auto-finish race when timer is at 3 seconds or less (save results early with buffer)
   // Increased from 1 second to prevent race condition with TICK clearing activeRace
@@ -267,7 +343,7 @@ export default function RaceTab() {
           <View style={styles.headerTopRow}>
             <View style={styles.trackInfo}>
               <Text style={styles.pageTitle}>Race Results</Text>
-              <Text style={styles.pageSubtitle}>Start a race from My Team</Text>
+              <Text style={styles.pageSubtitle}>Most recent race leaderboard</Text>
             </View>
           </View>
         </View>
@@ -276,10 +352,63 @@ export default function RaceTab() {
             <View style={styles.resultsHeader}>
               <Text style={styles.resultsTitle}>Final Results</Text>
             </View>
-            <View style={styles.emptyResults}>
-              <Text style={styles.emptyText}>No race results yet</Text>
-              <Text style={styles.emptySubtext}>Complete a race to see results here</Text>
-            </View>
+            {displayResults ? (
+              <ScrollView
+                style={styles.resultsScroll}
+                contentContainerStyle={styles.resultsScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {displayResults.map((result) => (
+                  <View
+                    key={result.position}
+                    style={[
+                      styles.resultLeaderboardRow,
+                      result.isTeam && styles.resultLeaderboardRowTeam,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.resultLeaderboardPosition,
+                        result.position === 1 && styles.resultLeaderboardPosition1st,
+                        result.position === 2 && styles.resultLeaderboardPosition2nd,
+                        result.position === 3 && styles.resultLeaderboardPosition3rd,
+                        result.isTeam && styles.resultLeaderboardPositionTeam,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.resultLeaderboardPositionText,
+                          result.isTeam && styles.resultLeaderboardPositionTextTeam,
+                        ]}
+                      >
+                        {result.position}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.resultLeaderboardName,
+                        result.isTeam && styles.resultLeaderboardNameTeam,
+                      ]}
+                    >
+                      {result.name}
+                    </Text>
+                    <Text style={styles.resultLeaderboardRating}>{result.rating.toFixed(2)}★</Text>
+                    <Text style={styles.resultLeaderboardKnowledge}>
+                      {result.knowledgePoints > 0 ? `+${result.knowledgePoints}` : '—'}
+                    </Text>
+                    <Text style={styles.resultLeaderboardLaps}>{result.laps}</Text>
+                    <Text style={styles.resultLeaderboardGap}>
+                      {result.position === 1 ? '—' : `+${result.gap.toFixed(1)}`}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyResults}>
+                <Text style={styles.emptyText}>No race results yet</Text>
+                <Text style={styles.emptySubtext}>Complete a race to see results here</Text>
+              </View>
+            )}
           </View>
         </View>
       </SafeAreaView>
@@ -364,8 +493,8 @@ export default function RaceTab() {
               contentContainerStyle={styles.resultsScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {raceResults ? (
-                raceResults.map((result) => (
+              {displayResults ? (
+                displayResults.map((result) => (
                   <View
                     key={result.position}
                     style={[
