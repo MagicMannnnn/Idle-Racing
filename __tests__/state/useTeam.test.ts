@@ -53,18 +53,21 @@ describe('useTeam', () => {
 
   it('should quote driver hire correctly', () => {
     const state = useTeam.getState()
-    const quote = state.quoteDriver(2)
+    const contractLength = 120 * 60 * 1000 // 120 minutes in ms
+    const quote = state.quoteDriver(2, contractLength)
 
     expect(quote.ok).toBe(true)
     if (quote.ok) {
       expect(quote.cost).toBeGreaterThan(0)
       expect(quote.time).toBeGreaterThan(0)
+      expect(quote.contractLength).toBe(contractLength)
     }
   })
 
   it('should not allow hiring driver above HQ rating', () => {
     const state = useTeam.getState()
-    const quote = state.quoteDriver(5)
+    const contractLength = 60 * 60 * 1000 // 60 minutes in ms
+    const quote = state.quoteDriver(5, contractLength)
 
     expect(quote.ok).toBe(false)
     if (!quote.ok) {

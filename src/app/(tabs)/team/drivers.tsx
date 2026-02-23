@@ -35,24 +35,74 @@ const DRIVER_NAMES = [
   'Blake Shelton',
   'Charlie Brown',
   'Drew Barrymore',
+  'Sam Rivera',
+  'Jordan Hayes',
+  'Skylar Reed',
+  'Parker Stone',
+  'Rowan Chase',
+  'Sage Mitchell',
+  'Phoenix Wright',
+  'River Banks',
+  'Kai Fisher',
+  'Ellis Grant',
+  'Ashton Cole',
+  'Logan Pierce',
+  'Harper Quinn',
+  'Finley Brooks',
+  'Kendall Fox',
+  'Hayden Cruz',
+  'Emerson Gray',
+  'Reagan Mills',
+  'Sawyer Hart',
+  'Peyton Rose',
+  'Sutton Vale',
+  'Jules Knight',
+  'Marley Stone',
+  'London Ray',
+  'Brooklyn West',
+  'Eden Cross',
+  'Lennox Page',
+  'Armani Blake',
+  'Jaden Storm',
+  'Remy Lane',
 ]
 
 interface DriverOption {
   name: string
   rating: number
+  contractLength: number // in milliseconds
 }
 
 function StarRating({ rating, maxRating = 5 }: { rating: number; maxRating?: number }) {
   return (
     <View style={styles.starRating}>
-      {Array.from({ length: maxRating }).map((_, i) => (
-        <Ionicons
-          key={i}
-          name={i < rating ? 'star' : 'star-outline'}
-          size={20}
-          color={i < rating ? '#FFD700' : 'rgba(255,255,255,0.30)'}
-        />
-      ))}
+      {Array.from({ length: maxRating }).map((_, i) => {
+        const starFill = Math.max(0, Math.min(1, rating - i))
+
+        // Full star
+        if (starFill >= 1) {
+          return <Ionicons key={i} name="star" size={20} color="#FFD700" />
+        }
+        // Partial star
+        if (starFill > 0) {
+          return (
+            <View key={i} style={{ position: 'relative' }}>
+              <Ionicons name="star-outline" size={20} color="rgba(255,255,255,0.30)" />
+              <View
+                style={{
+                  position: 'absolute',
+                  overflow: 'hidden',
+                  width: 20 * starFill,
+                }}
+              >
+                <Ionicons name="star" size={20} color="#FFD700" />
+              </View>
+            </View>
+          )
+        }
+        // Empty star
+        return <Ionicons key={i} name="star-outline" size={20} color="rgba(255,255,255,0.30)" />
+      })}
     </View>
   )
 }
@@ -116,7 +166,7 @@ function DriverCard({ driver, onFire }: { driver: Driver; onFire: () => void }) 
 
       <View style={styles.ratingRow}>
         <StarRating rating={driver.rating} />
-        <Text style={styles.ratingText}>{driver.rating}★ Driver</Text>
+        <Text style={styles.ratingText}>{driver.rating.toFixed(2)}★ Driver</Text>
       </View>
 
       <View style={styles.driverMeta}>
@@ -164,24 +214,57 @@ export default function DriversPage() {
   const [driverNumber, setDriverNumber] = useState<string>('')
   const scrollViewRef = useRef<ScrollView>(null)
 
-  // Generate 5 random driver options (memoized to avoid regeneration)
+  // Generate driver options ensuring at least one per 0.5 rating range (memoized)
   const driverOptions = useMemo<DriverOption[]>(() => {
     const options: DriverOption[] = []
     const usedNames = new Set<string>()
 
-    for (let i = 0; i < 5; i++) {
+    // Calculate required 0.5 ranges from 0.5 up to max rating
+    const requiredRanges: number[] = []
+    for (let r = 0.5; r <= hq.maxDriverRating; r += 0.5) {
+      requiredRanges.push(r)
+    }
+
+    // Ensure at least one driver per 0.5 rating range
+    requiredRanges.forEach((baseRating) => {
       let name: string
       do {
         name = DRIVER_NAMES[Math.floor(Math.random() * DRIVER_NAMES.length)]
       } while (usedNames.has(name))
       usedNames.add(name)
 
-      const rating = Math.min(hq.maxDriverRating, Math.floor(Math.random() * 3) + 2) // 2-4 stars, capped by HQ
-      options.push({ name, rating })
+      // Generate rating within ±0.25 of the base rating, to 2 decimal places
+      const minR = Math.max(0.5, baseRating - 0.25)
+      const maxR = Math.min(hq.maxDriverRating, baseRating + 0.25)
+      const rating = parseFloat((minR + Math.random() * (maxR - minR)).toFixed(2))
+
+      // Random contract length between 30 and 120 minutes, in milliseconds
+      const contractMinutes = 30 + Math.random() * 90 // 30-120 minutes
+      const contractLength = Math.round(contractMinutes * 60 * 1000)
+
+      options.push({ name, rating, contractLength })
+    })
+
+    // Fill remaining slots with random drivers (up to 5 total)
+    while (options.length < 5) {
+      let name: string
+      do {
+        name = DRIVER_NAMES[Math.floor(Math.random() * DRIVER_NAMES.length)]
+      } while (usedNames.has(name))
+      usedNames.add(name)
+
+      // Random rating across full range
+      const rating = parseFloat((0.5 + Math.random() * (hq.maxDriverRating - 0.5)).toFixed(2))
+
+      // Random contract length
+      const contractMinutes = 30 + Math.random() * 90
+      const contractLength = Math.round(contractMinutes * 60 * 1000)
+
+      options.push({ name, rating, contractLength })
     }
 
     return options
-  }, [showHireCarousel]) // Only regenerate when carousel is opened
+  }, [showHireCarousel, hq.maxDriverRating]) // Only regenerate when carousel is opened
 
   // Set random driver number when carousel opens
   useEffect(() => {
@@ -208,7 +291,7 @@ export default function DriversPage() {
       ? Math.max(1, Math.min(100, parseInt(driverNumber) || 1))
       : undefined
 
-    const result = hireDriver(name, option.rating, number)
+    const result = hireDriver(name, option.rating, option.contractLength, number)
     if (!result.ok) {
       if (result.reason === 'not_enough_money') {
         alert('Not enough money!')
@@ -216,6 +299,8 @@ export default function DriversPage() {
         alert('All driver slots are full!')
       } else if (result.reason === 'rating_too_high') {
         alert(`Upgrade your HQ to unlock ${option.rating}-star drivers!`)
+      } else if (result.reason === 'number_taken') {
+        alert(`Driver number ${number} is already in use! Please choose a different number.`)
       }
       return
     }
@@ -288,7 +373,7 @@ export default function DriversPage() {
               style={Platform.OS === 'web' ? { maxWidth: '100%' } : undefined}
             >
               {driverOptions.map((option, idx) => {
-                const quote = quoteDriver(option.rating)
+                const quote = quoteDriver(option.rating, option.contractLength)
                 const affordable = quote.ok && quote.affordable
                 const disabled = !quote.ok || !affordable
 
@@ -297,7 +382,10 @@ export default function DriversPage() {
                     <View style={styles.carouselCardInner}>
                       <View style={styles.carouselDriverInfo}>
                         <Text style={styles.carouselDriverName}>{option.name}</Text>
-                        <StarRating rating={option.rating} />
+                        <View style={styles.ratingRow}>
+                          <StarRating rating={option.rating} />
+                          <Text style={styles.carouselRatingText}>{option.rating.toFixed(2)}★</Text>
+                        </View>
                       </View>
 
                       <View style={styles.customNameSection}>
@@ -344,7 +432,19 @@ export default function DriversPage() {
                         <View style={styles.carouselStat}>
                           <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.70)" />
                           <Text style={styles.carouselStatText}>
-                            {quote.ok ? `${Math.floor(quote.time)}s` : '???'}
+                            {quote.ok ? `${Math.floor(quote.time)}s hire` : '???'}
+                          </Text>
+                        </View>
+                        <View style={styles.carouselStat}>
+                          <Ionicons
+                            name="calendar-outline"
+                            size={18}
+                            color="rgba(255,255,255,0.70)"
+                          />
+                          <Text style={styles.carouselStatText}>
+                            {quote.ok
+                              ? `${Math.round(quote.contractLength / 60000)}min contract`
+                              : '???'}
                           </Text>
                         </View>
                       </View>
@@ -581,6 +681,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.5,
   },
+  carouselRatingText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 16,
+    fontWeight: '800',
+    marginLeft: 8,
+  },
 
   customNameSection: {
     gap: 6,
@@ -619,7 +725,8 @@ const styles = StyleSheet.create({
 
   carouselStats: {
     flexDirection: 'row',
-    gap: 16,
+    flexWrap: 'wrap',
+    gap: 12,
   },
   carouselStat: {
     flexDirection: 'row',
@@ -628,7 +735,7 @@ const styles = StyleSheet.create({
   },
   carouselStatText: {
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '800',
   },
 

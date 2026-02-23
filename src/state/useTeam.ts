@@ -11,12 +11,13 @@ export type UpgradeMode = 'x1' | 'x10' | 'max'
 export type Driver = {
   id: string
   name: string
-  rating: number // 1-5 stars
+  rating: number // Decimal rating, e.g. 0.5 to 5.00
   number: number // Driver's racing number (1-100)
   hiredAt: number
   hiringProgress?: number // 0-1 if currently hiring
   hiringStartedAt?: number
   cost: number
+  contractLength: number // in milliseconds
   contractExpiresAt?: number // timestamp when contract expires (only set after hiring completes)
 }
 
@@ -129,16 +130,18 @@ type TeamState = {
 
   quoteDriver: (
     rating: number,
+    contractLength: number,
   ) =>
-    | { ok: true; cost: number; time: number; affordable: boolean }
+    | { ok: true; cost: number; time: number; contractLength: number; affordable: boolean }
     | { ok: false; reason: 'slots_full' | 'rating_too_high' }
   hireDriver: (
     name: string,
     rating: number,
+    contractLength: number,
     number?: number,
   ) =>
     | { ok: true; driver: Driver; cost: number; time: number }
-    | { ok: false; reason: 'slots_full' | 'not_enough_money' | 'rating_too_high' }
+    | { ok: false; reason: 'slots_full' | 'not_enough_money' | 'rating_too_high' | 'number_taken' }
   fireDriver: (driverId: string) => { ok: true } | { ok: false; reason: 'not_found' }
 
   // Upgrade functions
@@ -184,7 +187,8 @@ type TeamState = {
 function hqLevelCost(fromLevel: number, toLevel: number) {
   let total = 0
   for (let lvl = fromLevel + 1; lvl <= toLevel; lvl++) {
-    total += 1000 * (2 + Math.pow(4, Math.pow(lvl, 1.1)) * 2)
+    // Increased base cost and exponential scaling
+    total += 2500 * (3 + Math.pow(5, Math.pow(lvl, 1.15)) * 3)
   }
   return Math.round(total)
 }
@@ -198,14 +202,25 @@ function hqUpgradeTime(fromLevel: number, toLevel: number) {
   return total
 }
 
-function driverCost(rating: number) {
-  // Exponential cost based on rating
-  return Math.round(500 * Math.pow(5, rating - 1))
+function driverCost(rating: number, contractMinutes: number) {
+  // Massive cost scaling based on rating and contract length
+  // Target: 2★ 2hr = 1M, 3★ 2hr = 1B (1000x per star)
+  // Formula: 1M * 1000^(rating - 2) * (contractMinutes / 120)
+  const baseCost = 1000000
+  const baseRating = 2.0
+  const baseContractMinutes = 120
+  const ratingMultiplier = 1000
+
+  return Math.round(
+    baseCost *
+      Math.pow(ratingMultiplier, rating - baseRating) *
+      (contractMinutes / baseContractMinutes),
+  )
 }
 
 function driverHireTime(rating: number) {
-  // Time in seconds
-  return 20 + rating * 10 // 30s for 1-star, 70s for 5-star
+  // Time in seconds - linear interpolation based on exact rating
+  return 20 + rating * 10
 }
 
 function upgradeLevelCost(
@@ -549,7 +564,7 @@ function reducer(
           const progress = Math.min(1, elapsed / totalTime)
 
           if (progress >= 1) {
-            // Hiring complete - set 1 hour contract
+            // Hiring complete - set contract expiry based on driver's contract length
             const {
               hiringProgress: _hiringProgress,
               hiringStartedAt: _hiringStartedAt,
@@ -557,7 +572,7 @@ function reducer(
             } = driver
             return {
               ...completedDriver,
-              contractExpiresAt: action.now + 3600000, // 1 hour from now
+              contractExpiresAt: action.now + driver.contractLength,
             }
           } else {
             return { ...driver, hiringProgress: progress }
@@ -694,7 +709,7 @@ function createActions(
       return state.hq.maxDriverRating
     },
 
-    quoteDriver: (rating: number) => {
+    quoteDriver: (rating: number, contractLength: number) => {
       const state = getState()
 
       // Check if hiring in progress
@@ -710,19 +725,22 @@ function createActions(
         return { ok: false as const, reason: 'rating_too_high' as const }
       }
 
-      const cost = driverCost(rating)
+      const contractMinutes = Math.round(contractLength / 60000)
+      const cost = driverCost(rating, contractMinutes)
       const time = driverHireTime(rating)
 
       return {
         ok: true as const,
         cost,
         time,
+        contractLength,
         affordable: canAfford(cost),
       }
     },
 
-    hireDriver: (name: string, rating: number, number?: number) => {
-      const quote = createActions(dispatch, getState).quoteDriver(rating)
+    hireDriver: (name: string, rating: number, contractLength: number, number?: number) => {
+      const state = getState()
+      const quote = createActions(dispatch, getState).quoteDriver(rating, contractLength)
       if (!quote.ok) return quote
 
       const cost = quote.cost as number
@@ -732,8 +750,25 @@ function createActions(
         return { ok: false as const, reason: 'not_enough_money' as const }
       }
 
-      // Generate random number 1-100 if not provided
-      const driverNumber = number ?? Math.floor(Math.random() * 100) + 1
+      // Generate random number 1-100 if not provided, ensuring it's unique
+      let driverNumber = number ?? Math.floor(Math.random() * 100) + 1
+
+      // Check if the number is already in use
+      const existingNumbers = new Set(state.drivers.map((d) => d.number))
+      if (number !== undefined && existingNumbers.has(number)) {
+        // Refund the cost since we can't hire
+        useMoney.getState().earn(cost)
+        return { ok: false as const, reason: 'number_taken' as const }
+      }
+
+      // If auto-generating and the number is taken, find an available one
+      if (number === undefined) {
+        let attempts = 0
+        while (existingNumbers.has(driverNumber) && attempts < 100) {
+          driverNumber = Math.floor(Math.random() * 100) + 1
+          attempts++
+        }
+      }
 
       const driver: Driver = {
         id: `driver-${Date.now()}-${Math.random()}`,
@@ -742,6 +777,7 @@ function createActions(
         number: driverNumber,
         hiredAt: Date.now(),
         cost,
+        contractLength,
       }
 
       dispatch({
