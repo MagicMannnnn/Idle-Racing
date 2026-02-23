@@ -39,7 +39,6 @@ function calculateKnowledgePoints(position: number, totalCars: number): number {
 }
 
 export default function RaceTab() {
-  console.log('RaceTab rendered')
   const activeRace = useTeam((s: any) => s.activeRace)
   const drivers = useTeam((s: any) => s.drivers)
   const upgrades = useTeam((s: any) => s.upgrades)
@@ -47,10 +46,6 @@ export default function RaceTab() {
   const getMeanCompetitorRating = useTeam((s: any) => s.getMeanCompetitorRating)
   const allTracks = useTracks((s: any) => s.tracks)
   const addKnowledge = usePrestige((s: any) => s.addKnowledge)
-
-  console.log('Active race:', activeRace)
-  console.log('Drivers:', drivers.length)
-  console.log('Upgrades:', upgrades.length)
 
   // Get track from activeRace
   const trackId = activeRace?.trackId
@@ -73,14 +68,6 @@ export default function RaceTab() {
 
   const [now, setNow] = useState(Date.now())
 
-  // Log activeRace changes
-  useEffect(() => {
-    console.log(
-      'activeRace changed:',
-      activeRace ? `finishedAt: ${activeRace.finishedAt}` : 'undefined',
-    )
-  }, [activeRace])
-
   const hiredDrivers = useMemo(
     () => drivers.filter((d: any) => d.hiringProgress === undefined),
     [drivers],
@@ -96,19 +83,9 @@ export default function RaceTab() {
 
   // Calculate individual ratings for each team driver (driver rating + car rating average)
   const teamDriverRatings = useMemo(() => {
-    if (hiredDrivers.length === 0 || upgrades.length === 0) {
-      console.log(
-        'No team driver ratings: drivers=',
-        hiredDrivers.length,
-        'upgrades=',
-        upgrades.length,
-      )
-      return []
-    }
+    if (hiredDrivers.length === 0 || upgrades.length === 0) return []
     const carRating = upgrades.reduce((sum: number, u: any) => sum + u.value, 0) / upgrades.length
-    const ratings = hiredDrivers.map((driver: any) => (driver.rating + carRating) / 2)
-    console.log('Team driver ratings calculated:', ratings)
-    return ratings
+    return hiredDrivers.map((driver: any) => (driver.rating + carRating) / 2)
   }, [hiredDrivers, upgrades])
 
   // Update current time every second for countdown
@@ -160,29 +137,12 @@ export default function RaceTab() {
   }, [track])
 
   const handleEndRace = useCallback(() => {
-    console.log('handleEndRace called')
-    console.log('activeRace:', activeRace)
-    console.log('track:', track)
-    console.log('activeRace?.finishedAt:', activeRace?.finishedAt)
-
-    if (!activeRace || !track || activeRace.finishedAt) {
-      console.log('handleEndRace returning early')
-      return
-    }
+    if (!activeRace || !track || activeRace.finishedAt) return
 
     // Get the actual car positions from the live race
     const cars = latestCarsRef.current
     const ratings = latestCarRatingsRef.current
-
-    console.log('=== RACE END DEBUG ===')
-    console.log('Cars length:', cars.length)
-    console.log('Ratings length:', ratings.length)
-    console.log('Active race:', activeRace)
-
-    if (cars.length === 0) {
-      console.warn('No cars captured at race end')
-      return
-    }
+    if (cars.length === 0) return
 
     // Convert cars to sortable format (read SharedValue.value)
     const carsWithProgress = cars.map((car) => ({
@@ -270,13 +230,7 @@ export default function RaceTab() {
     }
 
     // Finish race by adding result data to activeRace
-    console.log('Calling finishTeamRace with:', {
-      teamPosition,
-      totalCars: carsWithProgress.length,
-      teamAverageRating,
-    })
     finishTeamRace(teamPosition, carsWithProgress.length, teamAverageRating, true)
-    console.log('finishTeamRace called successfully')
   }, [
     activeRace,
     track,
@@ -292,7 +246,6 @@ export default function RaceTab() {
   // Increased from 1 second to prevent race condition with TICK clearing activeRace
   useEffect(() => {
     if (activeRace && !activeRace.finishedAt && timeRemaining <= 3) {
-      console.log('Auto-finishing race at timeRemaining:', timeRemaining)
       handleEndRace()
     }
   }, [activeRace, timeRemaining, handleEndRace])

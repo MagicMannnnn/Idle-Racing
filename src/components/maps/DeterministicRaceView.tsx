@@ -279,14 +279,6 @@ export function DeterministicRaceView({
   speedVariance,
   onRaceStateUpdate,
 }: Props) {
-  console.log('DeterministicRaceView rendered with:', {
-    trackId,
-    seed,
-    meanCompetitorRating,
-    teamDriverRatings,
-    trackSize,
-  })
-
   const ensure = useTrackMaps((s: any) => s.ensure)
   const grid = useTrackMaps((s: any) => s.get(trackId))
 
@@ -306,7 +298,6 @@ export function DeterministicRaceView({
   // Update visual state based on elapsed time
   // Use longer interval when not focused to save performance
   useEffect(() => {
-    console.log('Visual state update effect started')
     const interval = isFocused ? 100 : 1000 // Update less frequently when not focused
     const t = setInterval(() => {
       const now = Date.now()
@@ -321,16 +312,11 @@ export function DeterministicRaceView({
       const entValue =
         isActive && entertainment && maxEntertainment ? entertainment / maxEntertainment : 0
 
-      console.log('Visual state update:', { elapsedMs, isActive, shouldShowCars, shouldRunSim })
-
       setShowCarsVisual((prev) => (prev !== shouldShowCars ? shouldShowCars : prev))
       setRunSim((prev) => (prev !== shouldRunSim ? shouldRunSim : prev))
       setEntertainmentValue((prev) => (prev !== entValue ? entValue : prev))
     }, interval)
-    return () => {
-      console.log('Visual state update effect cleanup')
-      clearInterval(t)
-    }
+    return () => clearInterval(t)
   }, [startedAt, durationMs, entertainment, maxEntertainment, isFocused])
 
   useEffect(() => {
@@ -366,16 +352,7 @@ export function DeterministicRaceView({
   // Team cars (IDs 1...N) use actual driver+car ratings, competitors use random ratings
   // Starting grid is sorted by rating in useTrackCars: lowest rated starts first (reverse grid)
   const carRatings = useMemo(() => {
-    console.log('carRatings useMemo executing with:', {
-      seed,
-      trackSize,
-      loopLength: loop.length,
-      meanCompetitorRating,
-      teamDriverRatings,
-    })
-
     const carCount = Math.min(trackSize, Math.floor(loop.length * 0.5), 20)
-    console.log('Calculated carCount:', carCount)
     if (carCount === 0) return []
 
     // Box-Muller transform for normal distribution
@@ -412,27 +389,14 @@ export function DeterministicRaceView({
 
     // Replace ratings for team cars (car IDs 1...N) with actual driver+car ratings
     const teamCount = teamDriverRatings?.length || 0
-    console.log(
-      'Replacing team car ratings. teamCount:',
-      teamCount,
-      'teamDriverRatings:',
-      teamDriverRatings,
-    )
     if (teamDriverRatings && teamCount > 0) {
       for (let i = 0; i < Math.min(teamCount, ratings.length); i++) {
-        console.log(`Setting rating[${i}] from ${ratings[i]} to ${teamDriverRatings[i]}`)
         ratings[i] = teamDriverRatings[i]
       }
     }
 
-    console.log('Final carRatings:', ratings)
     return ratings
   }, [seed, trackSize, loop.length, meanCompetitorRating, teamDriverRatings])
-
-  // Debug log for carRatings changes
-  useEffect(() => {
-    console.log('Car ratings recalculated:', carRatings.length, 'ratings:', carRatings)
-  }, [carRatings])
 
   const { cars, start, stop, newRace } = useTrackCars({
     loop,
@@ -444,11 +408,6 @@ export function DeterministicRaceView({
     carRatings,
     speedVariance,
   })
-
-  // Debug log for cars changes
-  useEffect(() => {
-    console.log('Cars array updated. Length:', cars.length)
-  }, [cars.length])
 
   const raceInitializedRef = useRef(false)
   const lastSeedRef = useRef<number | null>(null)
@@ -472,67 +431,42 @@ export function DeterministicRaceView({
   // Start race when ready and elapsed time > 0
   // Keep running even when not focused to maintain race state
   useEffect(() => {
-    console.log(
-      'Race start effect. runSim:',
-      runSim,
-      'loop.length:',
-      loop.length,
-      'cars.length:',
-      cars.length,
-    )
     if (!runSim) return
     if (loop.length === 0) return
     if (cars.length === 0) return
 
     const now = Date.now()
     const elapsedMs = now - startedAt
-    console.log('Race timing. elapsedMs:', elapsedMs, 'startedAt:', startedAt, 'now:', now)
 
     // Only start animation after elapsed time > 0
     if (elapsedMs <= 0) return
 
     // Initialize race with seed (once per seed)
     if (!raceInitializedRef.current) {
-      console.log('Initializing race with seed:', seed)
       raceInitializedRef.current = true
       newRace(seed)
       // Small delay to ensure initialization completes before starting
       setTimeout(() => {
-        console.log('Starting race after initialization')
         start()
       }, 50)
       return
     }
 
-    console.log('Starting race (already initialized)')
     start()
   }, [runSim, loop.length, cars.length, newRace, start, seed, startedAt])
 
   // Provide live race state updates to parent component
   useEffect(() => {
     if (!onRaceStateUpdate) return
-    if (cars.length === 0) {
-      console.warn('Cars not yet created, waiting...')
-      return
-    }
+    if (cars.length === 0) return
     if (!runSim) return
-
-    console.log(
-      'Race state update interval started. Cars:',
-      cars.length,
-      'Ratings:',
-      carRatings.length,
-    )
 
     // Update parent with current car states and ratings periodically
     const interval = setInterval(() => {
       onRaceStateUpdate(cars, carRatings)
     }, 250) // 4 times per second
 
-    return () => {
-      console.log('Race state update interval stopped')
-      clearInterval(interval)
-    }
+    return () => clearInterval(interval)
   }, [cars, carRatings, onRaceStateUpdate, runSim])
 
   const standSet = useMemo(() => {
