@@ -392,10 +392,19 @@ export function useTrackCars({
       const anchor = len - 1e-3
 
       const carIndices = Array.from({ length: safeCarCount }, (_, i) => i)
-      const shuffledIndices = shuffle(carIndices, rand)
+
+      // Sort by rating for reverse grid start (lowest rating starts first)
+      // If no ratings provided, shuffle randomly
+      const orderedIndices = carRatings
+        ? carIndices.slice().sort((a, b) => {
+            const ratingA = carRatings[a] ?? 0
+            const ratingB = carRatings[b] ?? 0
+            return ratingA - ratingB // ascending: lowest first
+          })
+        : shuffle(carIndices, rand)
 
       for (let posIdx = 0; posIdx < safeCarCount; posIdx++) {
-        const i = shuffledIndices[posIdx]
+        const i = orderedIndices[posIdx]
         const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
 
         // Apply rating multiplier if ratings are provided

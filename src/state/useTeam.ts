@@ -456,7 +456,12 @@ function reducer(
     }
 
     case 'FINISH_TEAM_RACE': {
-      if (!state.activeRace) return state
+      if (!state.activeRace) {
+        console.warn('FINISH_TEAM_RACE called but no activeRace!')
+        return state
+      }
+
+      console.log('FINISH_TEAM_RACE: Marking race as finished at', Date.now())
 
       // Adjust mean competitor rating based on performance
       let newMeanRating = state.meanCompetitorRating
@@ -653,9 +658,35 @@ function reducer(
 
       // Check if active race has ended (based on duration)
       // Don't clear if race has already been finished (results need to persist)
+      // Add grace period after finishedAt is set to allow results to be viewed
       if (newState.activeRace && !newState.activeRace.finishedAt) {
         const raceEndTime = newState.activeRace.startedAt + newState.activeRace.duration * 60 * 1000
         if (action.now >= raceEndTime) {
+          // Race time has expired but not marked as finished - this shouldn't happen with proper handling
+          // Clear it after an additional grace period to allow handleEndRace to complete
+          const gracePeriod = 5000 // 5 second grace period
+          if (action.now >= raceEndTime + gracePeriod) {
+            console.warn(
+              'TICK: Race cleared after grace period - handleEndRace may have failed. Time:',
+              action.now,
+              'RaceEndTime:',
+              raceEndTime,
+            )
+            newState.activeRace = undefined
+          } else {
+            console.log(
+              'TICK: Race ended but within grace period. Waiting for handleEndRace. Remaining:',
+              Math.ceil((raceEndTime + gracePeriod - action.now) / 1000),
+              's',
+            )
+          }
+        }
+      } else if (newState.activeRace && newState.activeRace.finishedAt) {
+        // Race is finished - allow results to persist for viewing
+        // Don't auto-clear finished races, let user start new race or navigate away
+        const resultsPersistTime = 300000 // Keep results for 5 minutes
+        if (action.now >= newState.activeRace.finishedAt + resultsPersistTime) {
+          console.log('TICK: Clearing old finished race after 5 minutes')
           newState.activeRace = undefined
         }
       }
