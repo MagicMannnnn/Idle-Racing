@@ -71,6 +71,7 @@ interface DriverOption {
   name: string
   rating: number
   contractLength: number // in milliseconds
+  driverNumber: number // unique number for each option
 }
 
 function StarRating({ rating, maxRating = 5 }: { rating: number; maxRating?: number }) {
@@ -211,13 +212,27 @@ export default function DriversPage() {
 
   const [showHireCarousel, setShowHireCarousel] = useState(false)
   const [customName, setCustomName] = useState('')
-  const [driverNumber, setDriverNumber] = useState<string>('')
+  const [driverNumbers, setDriverNumbers] = useState<Record<number, string>>({})
   const scrollViewRef = useRef<ScrollView>(null)
 
   // Generate driver options ensuring at least one per 0.5 rating range (memoized)
   const driverOptions = useMemo<DriverOption[]>(() => {
     const options: DriverOption[] = []
     const usedNames = new Set<string>()
+    const usedNumbers = new Set<number>()
+
+    // Mark existing driver numbers as used
+    drivers.forEach((d: any) => usedNumbers.add(d.number))
+
+    // Helper function to generate unique driver number
+    const generateUniqueNumber = () => {
+      let num: number
+      do {
+        num = Math.floor(Math.random() * 100) + 1
+      } while (usedNumbers.has(num))
+      usedNumbers.add(num)
+      return num
+    }
 
     // Calculate required 0.5 ranges from 0.5 up to max rating
     const requiredRanges: number[] = []
@@ -242,7 +257,10 @@ export default function DriversPage() {
       const contractMinutes = 30 + Math.random() * 90 // 30-120 minutes
       const contractLength = Math.round(contractMinutes * 60 * 1000)
 
-      options.push({ name, rating, contractLength })
+      // Generate unique driver number
+      const driverNumber = generateUniqueNumber()
+
+      options.push({ name, rating, contractLength, driverNumber })
     })
 
     // Fill remaining slots with random drivers (up to 5 total)
@@ -260,16 +278,19 @@ export default function DriversPage() {
       const contractMinutes = 30 + Math.random() * 90
       const contractLength = Math.round(contractMinutes * 60 * 1000)
 
-      options.push({ name, rating, contractLength })
+      // Generate unique driver number
+      const driverNumber = generateUniqueNumber()
+
+      options.push({ name, rating, contractLength, driverNumber })
     }
 
     return options
-  }, [showHireCarousel, hq.maxDriverRating]) // Only regenerate when carousel is opened
+  }, [hq.maxDriverRating, drivers.length]) // Only regenerate when HQ level or driver count changes
 
-  // Set random driver number when carousel opens
+  // Clear driver numbers when carousel closes
   useEffect(() => {
-    if (showHireCarousel && !driverNumber) {
-      setDriverNumber(String(Math.floor(Math.random() * 100) + 1))
+    if (!showHireCarousel) {
+      setDriverNumbers({})
     }
   }, [showHireCarousel])
 
@@ -285,11 +306,13 @@ export default function DriversPage() {
   const hiringDrivers = drivers.filter((d: any) => d.hiringProgress !== undefined)
   const allDrivers = [...hiringDrivers, ...hiredDrivers]
 
-  const handleHire = (option: DriverOption, useCustomName: boolean = false) => {
+  const handleHire = (option: DriverOption, idx: number, useCustomName: boolean = false) => {
     const name = useCustomName && customName.trim() ? customName.trim() : option.name
-    const number = driverNumber
-      ? Math.max(1, Math.min(100, parseInt(driverNumber) || 1))
-      : undefined
+    // Use custom number if provided, otherwise use the option's unique number
+    const customNumber = driverNumbers[idx]?.trim()
+    const number = customNumber
+      ? Math.max(1, Math.min(100, parseInt(customNumber) || option.driverNumber))
+      : option.driverNumber
 
     const result = hireDriver(name, option.rating, option.contractLength, number)
     if (!result.ok) {
@@ -307,7 +330,7 @@ export default function DriversPage() {
 
     setShowHireCarousel(false)
     setCustomName('')
-    setDriverNumber('')
+    setDriverNumbers({})
   }
 
   const handleFire = (driverId: string, driverName: string) => {
@@ -404,20 +427,25 @@ export default function DriversPage() {
                         <View style={styles.numberInputRow}>
                           <TextInput
                             style={[styles.customNameInput, styles.numberInput]}
-                            value={driverNumber}
-                            onChangeText={setDriverNumber}
-                            placeholder="Auto"
-                            placeholderTextColor="rgba(255,255,255,0.40)"
+                            value={driverNumbers[idx] || ''}
+                            onChangeText={(text) =>
+                              setDriverNumbers({ ...driverNumbers, [idx]: text })
+                            }
+                            placeholder={String(option.driverNumber)}
+                            placeholderTextColor="rgba(255,255,255,0.60)"
                             keyboardType="numeric"
                             maxLength={3}
                           />
                           <Pressable
                             style={styles.randomBtn}
                             onPress={() =>
-                              setDriverNumber(String(Math.floor(Math.random() * 100) + 1))
+                              setDriverNumbers({
+                                ...driverNumbers,
+                                [idx]: String(option.driverNumber),
+                              })
                             }
                           >
-                            <Ionicons name="shuffle" size={18} color="#FFFFFF" />
+                            <Ionicons name="refresh" size={18} color="#FFFFFF" />
                           </Pressable>
                         </View>
                       </View>
@@ -450,7 +478,7 @@ export default function DriversPage() {
                       </View>
 
                       <Pressable
-                        onPress={() => handleHire(option, !!customName.trim())}
+                        onPress={() => handleHire(option, idx, !!customName.trim())}
                         disabled={disabled}
                         style={({ pressed }) => [
                           styles.hireBtn,

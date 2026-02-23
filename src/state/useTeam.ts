@@ -57,6 +57,7 @@ export type ActiveTeamRace = {
   duration: number // minutes
   startedAt: number
   seed: number // for deterministic race simulation
+  meanCompetitorRating: number // mean rating of competitor field
   // Optional fields set when race finishes
   finishedAt?: number
   position?: number
@@ -85,6 +86,7 @@ export type LastTeamRace = {
   teamAverageRating: number
   position: number
   totalCars: number
+  meanCompetitorRating: number
 }
 
 type TeamState = {
@@ -94,6 +96,7 @@ type TeamState = {
   activeRace?: ActiveTeamRace
   lastRaceResult?: RaceResult
   lastTeamRace?: LastTeamRace
+  meanCompetitorRating: number // Starts at 1.0, adjusts based on performance
 
   // HQ functions
   quoteHQUpgrade: () =>
@@ -115,6 +118,7 @@ type TeamState = {
   getDriverSlots: () => number // equals maxDriverRating (1-5)
 
   // Team race functions
+  getMeanCompetitorRating: () => number
   startTeamRace: (
     trackId: string,
     duration: number,
@@ -123,6 +127,7 @@ type TeamState = {
     position: number,
     totalCars: number,
     teamAverageRating: number,
+    earnedPrestige: boolean,
     knowledgeAwarded?: boolean,
   ) => void
   clearTeamRace: () => void
@@ -349,6 +354,7 @@ function createInitialState(): Omit<TeamState, keyof ReturnType<typeof createAct
     activeRace: undefined,
     lastRaceResult: undefined,
     lastTeamRace: undefined,
+    meanCompetitorRating: 1.0, // Starts at 1.0
   }
 }
 
@@ -356,12 +362,20 @@ type Action =
   | { type: 'UPGRADE_HQ'; cost: number; toLevel: number; time: number; now: number }
   | { type: 'HIRE_DRIVER'; driver: Driver; cost: number; time: number; now: number }
   | { type: 'FIRE_DRIVER'; driverId: string }
-  | { type: 'START_TEAM_RACE'; trackId: string; duration: number; now: number; seed: number }
+  | {
+      type: 'START_TEAM_RACE'
+      trackId: string
+      duration: number
+      now: number
+      seed: number
+      meanCompetitorRating: number
+    }
   | {
       type: 'FINISH_TEAM_RACE'
       position: number
       totalCars: number
       teamAverageRating: number
+      earnedPrestige: boolean
       knowledgeAwarded?: boolean
     }
   | { type: 'CLEAR_TEAM_RACE' }
@@ -435,6 +449,7 @@ function reducer(
           duration: action.duration,
           startedAt: action.now,
           seed: action.seed,
+          meanCompetitorRating: action.meanCompetitorRating,
         },
         lastTeamRace: undefined, // Clear previous race results when starting new race
       }
@@ -442,8 +457,24 @@ function reducer(
 
     case 'FINISH_TEAM_RACE': {
       if (!state.activeRace) return state
+
+      // Adjust mean competitor rating based on performance
+      let newMeanRating = state.meanCompetitorRating
+      const maxRating = state.hq.maxDriverRating - 0.5
+
+      if (action.earnedPrestige) {
+        // Increase difficulty by 0.05-0.1
+        const increase = 0.05 + Math.random() * 0.05
+        newMeanRating = Math.min(maxRating, newMeanRating + increase)
+      } else {
+        // Decrease difficulty by 0.05-0.1
+        const decrease = 0.05 + Math.random() * 0.05
+        newMeanRating = Math.max(1.0, newMeanRating - decrease)
+      }
+
       return {
         ...state,
+        meanCompetitorRating: newMeanRating,
         activeRace: {
           ...state.activeRace,
           finishedAt: Date.now(),
@@ -709,6 +740,11 @@ function createActions(
       return state.hq.maxDriverRating
     },
 
+    getMeanCompetitorRating: () => {
+      const state = getState()
+      return state.meanCompetitorRating
+    },
+
     quoteDriver: (rating: number, contractLength: number) => {
       const state = getState()
 
@@ -824,7 +860,14 @@ function createActions(
       const now = Date.now()
       const seed = (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0
 
-      dispatch({ type: 'START_TEAM_RACE', trackId, duration, now, seed })
+      dispatch({
+        type: 'START_TEAM_RACE',
+        trackId,
+        duration,
+        now,
+        seed,
+        meanCompetitorRating: state.meanCompetitorRating,
+      })
       return { ok: true as const }
     },
 
@@ -836,6 +879,7 @@ function createActions(
       position: number,
       totalCars: number,
       teamAverageRating: number,
+      earnedPrestige: boolean,
       knowledgeAwarded?: boolean,
     ) => {
       dispatch({
@@ -843,6 +887,7 @@ function createActions(
         position,
         totalCars,
         teamAverageRating,
+        earnedPrestige,
         knowledgeAwarded,
       })
     },

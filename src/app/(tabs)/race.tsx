@@ -43,6 +43,7 @@ export default function RaceTab() {
   const drivers = useTeam((s: any) => s.drivers)
   const upgrades = useTeam((s: any) => s.upgrades)
   const finishTeamRace = useTeam((s: any) => s.finishTeamRace)
+  const getMeanCompetitorRating = useTeam((s: any) => s.getMeanCompetitorRating)
   const allTracks = useTracks((s: any) => s.tracks)
   const addKnowledge = usePrestige((s: any) => s.addKnowledge)
 
@@ -56,11 +57,13 @@ export default function RaceTab() {
 
   // Store latest race state for accurate results
   const latestCarsRef = useRef<CarAnim[]>([])
+  const latestCarRatingsRef = useRef<number[]>([])
   const [raceResults, setRaceResults] = useState<RaceResultEntry[] | null>(null)
 
   // Callback to capture live race state
-  const handleRaceStateUpdate = useCallback((cars: CarAnim[]) => {
+  const handleRaceStateUpdate = useCallback((cars: CarAnim[], carRatings: number[]) => {
     latestCarsRef.current = cars
+    latestCarRatingsRef.current = carRatings
   }, [])
 
   const [now, setNow] = useState(Date.now())
@@ -192,9 +195,12 @@ export default function RaceTab() {
       // Calculate knowledge points reward
       const knowledgePoints = calculateKnowledgePoints(idx + 1, carsWithProgress.length)
 
+      // Get car rating from stored ratings array
+      const carRating = latestCarRatingsRef.current[car.id - 1] || 0
+
       return {
         position: idx + 1,
-        rating: 0, // Not needed for display
+        rating: carRating,
         isTeam,
         name,
         laps: car.laps,
@@ -210,7 +216,12 @@ export default function RaceTab() {
     if (!activeRace.knowledgeAwarded) {
       const teamResult = results.find((r) => r.isTeam)
       if (teamResult && teamResult.knowledgePoints > 0) {
-        addKnowledge(teamResult.knowledgePoints)
+        // Apply exponential prestige scaling based on mean competitor rating
+        // At mean 1.5: multiplier = 1, at mean 2.0: multiplier = 2, at mean 2.5: multiplier = 4
+        const meanRating = activeRace.meanCompetitorRating || 1.5
+        const prestigeMultiplier = Math.pow(2, (meanRating - 1.5) / 0.5)
+        const scaledKnowledge = Math.round(teamResult.knowledgePoints * prestigeMultiplier)
+        addKnowledge(scaledKnowledge)
       }
     }
 
@@ -326,12 +337,18 @@ export default function RaceTab() {
               <Text style={styles.resultsSubtitle}>
                 You finished P{activeRace.position} of {activeRace.totalCars}
               </Text>
+              {activeRace.meanCompetitorRating && (
+                <Text style={styles.resultsSubtitle}>
+                  Competitor Rating: {activeRace.meanCompetitorRating.toFixed(2)}★
+                </Text>
+              )}
             </View>
 
             {/* Column Headers */}
             <View style={styles.resultsTableHeader}>
               <Text style={[styles.resultsTableHeaderText, styles.colPos]}>P</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colName]}>Driver</Text>
+              <Text style={[styles.resultsTableHeaderText, styles.colRating]}>Rating</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colKnowledge]}>KP</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colLaps]}>Laps</Text>
               <Text style={[styles.resultsTableHeaderText, styles.colGap]}>Gap</Text>
@@ -377,6 +394,7 @@ export default function RaceTab() {
                     >
                       {result.name}
                     </Text>
+                    <Text style={styles.resultLeaderboardRating}>{result.rating.toFixed(2)}★</Text>
                     <Text style={styles.resultLeaderboardKnowledge}>
                       {result.knowledgePoints > 0 ? `+${result.knowledgePoints}` : '—'}
                     </Text>
@@ -388,7 +406,7 @@ export default function RaceTab() {
                 ))
               ) : (
                 <View style={styles.emptyResults}>
-                  <Text style={styles.emptyText}>Loading results...</Text>
+                  <Text style={styles.emptyText}></Text>
                 </View>
               )}
             </ScrollView>
@@ -408,6 +426,7 @@ export default function RaceTab() {
             startedAt={activeRace.startedAt}
             durationMs={activeRace.duration * 60 * 1000}
             teamAverageRating={teamAverageRating}
+            meanCompetitorRating={getMeanCompetitorRating()}
             speedVariance={12}
             onRaceStateUpdate={handleRaceStateUpdate}
           />
@@ -562,6 +581,10 @@ const styles = StyleSheet.create({
   colName: {
     flex: 1,
   },
+  colRating: {
+    width: 56,
+    textAlign: 'right',
+  },
   colKnowledge: {
     width: 48,
     textAlign: 'right',
@@ -631,6 +654,14 @@ const styles = StyleSheet.create({
   resultLeaderboardNameTeam: {
     fontWeight: '900',
     color: 'rgba(255,255,255,0.95)',
+  },
+  resultLeaderboardRating: {
+    width: 56,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFD700',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   resultLeaderboardKnowledge: {
     width: 48,

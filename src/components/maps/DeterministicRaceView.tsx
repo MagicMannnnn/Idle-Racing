@@ -32,9 +32,10 @@ type Props = {
   seed: number
   startedAt: number
   durationMs: number
-  teamAverageRating: number // Average of driver and car rating (determines distribution mean)
+  teamAverageRating: number // Team's average rating (for comparison)
+  meanCompetitorRating: number // Mean rating for competitor field (normal distribution center)
   speedVariance?: number // Optional speed variance (default: from settings). Use 12 for race tab.
-  onRaceStateUpdate?: (cars: CarAnim[]) => void // Callback to receive live car positions
+  onRaceStateUpdate?: (cars: CarAnim[], carRatings: number[]) => void // Callback to receive live car positions and ratings
 }
 
 const GRID_GAP = 1
@@ -271,7 +272,8 @@ export function DeterministicRaceView({
   seed,
   startedAt,
   durationMs,
-  teamAverageRating,
+  teamAverageRating: _teamAverageRating,
+  meanCompetitorRating,
   speedVariance,
   onRaceStateUpdate,
 }: Props) {
@@ -344,7 +346,7 @@ export function DeterministicRaceView({
   const loop = useMemo(() => buildTrackLoop(cells ?? [], mapSize), [cells, mapSize])
 
   // Generate car ratings using normal distribution (deterministic from seed)
-  // Mean = teamAverageRating, StdDev = dynamic based on car count (tighter for fewer cars)
+  // Mean = meanCompetitorRating, StdDev = dynamic based on car count (tighter for fewer cars)
   // 2 cars: stdDev≈0.04 (very tight), 20 cars: stdDev≈1.2 (good spread)
   const carRatings = useMemo(() => {
     const carCount = Math.min(trackSize, Math.floor(loop.length * 0.5), 20)
@@ -369,8 +371,8 @@ export function DeterministicRaceView({
       const u2 = nextRandom()
       const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
 
-      // Scale to mean=teamAverageRating with dynamic stdDev
-      const rating = teamAverageRating + z0 * stdDev
+      // Scale to mean=meanCompetitorRating with dynamic stdDev
+      const rating = meanCompetitorRating + z0 * stdDev
 
       // Clamp to valid range 0.1-5.0
       const clampedRating = Math.max(0.1, Math.min(5.0, rating))
@@ -378,7 +380,7 @@ export function DeterministicRaceView({
     }
 
     return ratings
-  }, [seed, trackSize, loop.length, teamAverageRating])
+  }, [seed, trackSize, loop.length, meanCompetitorRating])
 
   const { cars, start, stop, newRace } = useTrackCars({
     loop,
@@ -441,13 +443,13 @@ export function DeterministicRaceView({
     if (cars.length === 0) return
     if (!runSim) return
 
-    // Update parent with current car states periodically
+    // Update parent with current car states and ratings periodically
     const interval = setInterval(() => {
-      onRaceStateUpdate(cars)
+      onRaceStateUpdate(cars, carRatings)
     }, 250) // 4 times per second
 
     return () => clearInterval(interval)
-  }, [cars, onRaceStateUpdate, runSim])
+  }, [cars, carRatings, onRaceStateUpdate, runSim])
 
   const standSet = useMemo(() => {
     if (!cells.length) return new Set<number>()
