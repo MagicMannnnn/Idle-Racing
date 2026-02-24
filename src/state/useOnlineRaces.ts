@@ -144,12 +144,8 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
         grid?: { size: number; cells: string[] }
       }
 
-      // Update current race state
-      set((state) => ({
-        currentRace: state.currentRace
-          ? { ...state.currentRace, started: true, startedAt: payload.startedAt }
-          : null,
-      }))
+      // Always set currentRace with full config from server
+      set({ currentRace: config })
 
       // Convert online race to HostedRace format and store in useMyTeamRaces
       if (config && config.drivers && config.drivers.length > 0) {
@@ -165,6 +161,12 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
           gridSize = config.grid.size
           gridCells = config.grid.cells
           trackId = `online_${config.raceID}`
+
+          // Set grid in useTrackMaps for synthetic online trackId
+          const trackMapsState = useTrackMaps.getState()
+          trackMapsState.ensure(trackId, gridSize)
+          // Convert cells to CellType[]
+          trackMapsState.setCells(trackId, gridCells as any)
         }
         // Only fallback to local track if grid is missing
         if ((!gridSize || !gridCells || !trackId) && config.track) {
@@ -218,6 +220,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
             fieldSize: config.drivers.length,
             laps: config.laps,
             createdAt: config.updatedAt,
+            grid: config.grid ? config.grid : undefined,
           },
           state: 'running' as const,
           startedAt: payload.startedAt,
@@ -286,7 +289,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
       callback?.({ ok: false, error })
     }, 10000) // 10 second timeout
 
-    socket.emit('race:create', config, (response) => {
+    socket.emit('race:create', config, (response: any) => {
       clearTimeout(timeout)
       console.log('[Online Races] Create race response:', response)
 
@@ -298,12 +301,12 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
         return
       }
 
-      if (response.ok) {
+      if ((response as any).ok) {
         set({ error: null })
       } else {
-        set({ error: response.error || 'Failed to create race', isHost: false })
+        set({ error: (response as any).error || 'Failed to create race', isHost: false })
       }
-      callback?.(response)
+      callback?.(response as any)
     })
   },
 
@@ -326,7 +329,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
       callback?.({ ok: false, error })
     }, 10000)
 
-    socket.emit('race:join', { raceID, userId }, (response) => {
+    socket.emit('race:join', { raceID, userId }, (response: any) => {
       clearTimeout(timeout)
       console.log('[Online Races] Join race response:', response)
 
@@ -337,23 +340,26 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
         return
       }
 
-      if (response.ok) {
+      if ((response as any).ok) {
         set({ error: null })
       } else {
         // If race not found, reset local race state so user isn't blocked
-        if (response.error && response.error.toLowerCase().includes('race not found')) {
+        if (
+          (response as any).error &&
+          (response as any).error.toLowerCase().includes('race not found')
+        ) {
           try {
             const myTeamRacesState = require('./useMyTeamRaces').useMyTeamRaces.getState()
             myTeamRacesState.reset()
-          } catch (e) {
+          } catch {
             // ignore
           }
           set({ error: null }) // Clear error after reset so UI is unblocked
         } else {
-          set({ error: response.error || 'Failed to join race' })
+          set({ error: (response as any).error || 'Failed to join race' })
         }
       }
-      callback?.(response)
+      callback?.(response as any)
     })
   },
 
@@ -375,7 +381,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
       callback?.({ ok: false, error })
     }, 10000)
 
-    socket.emit('race:drivers_update', { raceID, userId, drivers }, (response) => {
+    socket.emit('race:drivers_update', { raceID, userId, drivers }, (response: any) => {
       clearTimeout(timeout)
       console.log('[Online Races] Update drivers response:', response)
 
@@ -386,10 +392,10 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
         return
       }
 
-      if (!response.ok) {
-        set({ error: response.error || 'Failed to update drivers' })
+      if (!(response as any).ok) {
+        set({ error: (response as any).error || 'Failed to update drivers' })
       }
-      callback?.(response)
+      callback?.(response as any)
     })
   },
 
@@ -401,12 +407,12 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
     }
 
     console.log('[Online Races] Starting race:', raceID)
-    socket.emit('race:start', { raceID, userId }, (response) => {
+    socket.emit('race:start', { raceID, userId }, (response: any) => {
       console.log('[Online Races] Start race response:', response)
-      if (!response.ok) {
-        set({ error: response.error || 'Failed to start race' })
+      if (!(response as any).ok) {
+        set({ error: (response as any).error || 'Failed to start race' })
       }
-      callback?.(response)
+      callback?.(response as any)
     })
   },
 

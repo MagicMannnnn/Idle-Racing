@@ -6,7 +6,6 @@ import { useMyTeamRaceCars } from '@hooks/useMyTeamRaceCars'
 import { useIsFocused } from '@react-navigation/native'
 import type { HostedRaceResultRow } from '@state/useMyTeamRaces'
 import { useMyTeamRaces } from '@state/useMyTeamRaces'
-import { useTrackMaps } from '@state/useTrackMaps'
 import {
   addDeg,
   angleFromDelta,
@@ -36,6 +35,7 @@ type Props = {
   driverIds: string[] // My Team driver IDs to race
   initialGridSize?: number
   onFinished?: (results: HostedRaceResultRow[]) => void
+  grid?: { size: number; cells: string[] }
 }
 
 const GRID_GAP = 1
@@ -266,12 +266,21 @@ export function HostedRaceTrackView({
   driverIds,
   initialGridSize = 5,
   onFinished,
+  grid: overrideGrid,
 }: Props) {
   const renderStartTime = useRef(performance.now())
   const renderCount = useRef(0)
 
-  const ensure = useTrackMaps((s: any) => s.ensure)
-  const grid = useTrackMaps((s: any) => s.get(trackId))
+  // Only use the provided grid if present; never fallback
+  const grid = overrideGrid || null
+  // Log grid for verification
+  React.useEffect(() => {
+    if (grid) {
+      console.log('[HostedRaceTrackView] Using grid from server:', grid)
+    } else {
+      console.warn('[HostedRaceTrackView] No grid provided!')
+    }
+  }, [grid])
 
   const getActiveRace = useMyTeamRaces((s: any) => s.getActiveRace)
 
@@ -291,9 +300,7 @@ export function HostedRaceTrackView({
 
   const [leaderId, setLeaderId] = useState<number | null>(null)
 
-  useEffect(() => {
-    ensure(trackId, initialGridSize)
-  }, [ensure, trackId, initialGridSize])
+  // Do not call ensure or useTrackMaps if grid is provided
 
   const mapSize = grid?.size ?? initialGridSize
   const cells = grid?.cells ?? []

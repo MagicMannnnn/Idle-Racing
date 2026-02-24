@@ -17,8 +17,24 @@ function HostedRaceView() {
   const [results, setResults] = useState<HostedRaceResultRow[] | null>(null)
 
   const track = useMemo(() => {
-    if (!race) return null
-    return getTracks.find((t: any) => t.id === race.config.trackId)
+    if (!race) {
+      console.log('[RaceScreen] No race found:', race)
+      return null
+    }
+    if (!race.config || !race.config.trackId) {
+      console.log('[RaceScreen] Race config missing or trackId missing:', race.config)
+      return null
+    }
+    const foundTrack = getTracks.find((t: any) => t.id === race.config.trackId)
+    if (!foundTrack) {
+      console.log(
+        '[RaceScreen] Track not found for trackId:',
+        race.config.trackId,
+        'Available tracks:',
+        getTracks.map((t: any) => t.id),
+      )
+    }
+    return foundTrack
   }, [race, getTracks])
 
   // Load existing results and auto-award prestige
@@ -46,7 +62,8 @@ function HostedRaceView() {
     router.push('/team')
   }
 
-  if (!race || !track) {
+  if (!race) {
+    console.log('[RaceScreen] Displaying Race not found:', { race, track })
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.container}>
@@ -63,6 +80,125 @@ function HostedRaceView() {
     )
   }
 
+  // If track lookup fails but grid is present, allow race to render
+  const grid = race.config && race.config.grid ? race.config.grid : null
+  if (!track && grid) {
+    console.log('[RaceScreen] Track not found, but grid is present. Rendering race.')
+    // Show live race view
+    if (race.state !== 'finished') {
+      return (
+        <SafeAreaView style={styles.safe}>
+          <View style={{ flex: 1 }}>
+            <HostedRaceTrackView
+              trackId={race.config.trackId}
+              driverIds={race.config.driverIds}
+              onFinished={setResults}
+              grid={grid}
+            />
+            <View style={{ position: 'absolute', top: 16, right: 16 }}>
+              <Pressable
+                onPress={quitRace}
+                style={({ pressed }) => [styles.quitButton, pressed && styles.quitButtonPressed]}
+              >
+                <Ionicons name="exit" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.quitButtonText}>Quit Race</Text>
+              </Pressable>
+            </View>
+          </View>
+        </SafeAreaView>
+      )
+    }
+    // Show results
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={10}>
+            <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+          </Pressable>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Race Complete</Text>
+            <Text style={styles.headerSubtitle}>{race.config.track || 'Unknown Track'}</Text>
+          </View>
+          <View style={{ width: 28 }} />
+        </View>
+        <View style={styles.resultsContainer}>
+          <View style={styles.resultsCard}>
+            <View style={styles.resultsHeader}>
+              <Ionicons name="trophy" size={28} color="#FFD700" />
+              <Text style={styles.resultsTitle}>Final Results</Text>
+            </View>
+            <ScrollView
+              style={styles.resultsList}
+              contentContainerStyle={{ gap: 8 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {results &&
+                results.map((result) => (
+                  <View
+                    key={result.driverId}
+                    style={[
+                      styles.resultRow,
+                      result.position === 1 && styles.resultRowFirst,
+                      result.position === 2 && styles.resultRowSecond,
+                      result.position === 3 && styles.resultRowThird,
+                    ]}
+                  >
+                    <View style={styles.resultLeft}>
+                      <View
+                        style={[
+                          styles.resultPosBox,
+                          result.position === 1 && styles.resultPosBoxFirst,
+                          result.position === 2 && styles.resultPosBoxSecond,
+                          result.position === 3 && styles.resultPosBoxThird,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.resultPosText,
+                            (result.position === 1 ||
+                              result.position === 2 ||
+                              result.position === 3) &&
+                              styles.resultPosTextTop,
+                          ]}
+                        >
+                          {result.position}
+                        </Text>
+                      </View>
+                      <View style={styles.resultInfo}>
+                        <Text style={styles.resultName}>
+                          {result.driverName} #{result.driverNumber}
+                        </Text>
+                        {result.isMyTeam && (
+                          <View style={styles.myTeamBadge}>
+                            <Text style={styles.myTeamBadgeText}>MY TEAM</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    {result.prestigeAwarded !== undefined && result.prestigeAwarded > 0 && (
+                      <View style={styles.prestigeBadge}>
+                        <Ionicons name="star" size={14} color="#9C27B0" />
+                        <Text style={styles.prestigeText}>+{result.prestigeAwarded}</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+            </ScrollView>
+            <View style={{ marginTop: 16, alignItems: 'center' }}>
+              <Pressable
+                onPress={quitRace}
+                style={({ pressed }) => [styles.quitButton, pressed && styles.quitButtonPressed]}
+              >
+                <Ionicons name="exit" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.quitButtonText}>Quit Race</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   // Show live race view
   if (!isFinished) {
     return (
@@ -72,6 +208,7 @@ function HostedRaceView() {
             trackId={race.config.trackId}
             driverIds={race.config.driverIds}
             onFinished={setResults}
+            grid={grid}
           />
           <View style={{ position: 'absolute', top: 16, right: 16 }}>
             <Pressable
@@ -96,7 +233,9 @@ function HostedRaceView() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Race Complete</Text>
-          <Text style={styles.headerSubtitle}>{track.name}</Text>
+          <Text style={styles.headerSubtitle}>
+            {track ? track.name : race.config.track || 'Unknown Track'}
+          </Text>
         </View>
         <View style={{ width: 28 }} />
       </View>
