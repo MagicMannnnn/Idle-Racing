@@ -15,28 +15,23 @@ function HostedRaceView() {
 
   const race = getActiveRace()
   const [results, setResults] = useState<HostedRaceResultRow[] | null>(null)
-  const [prestigeAwarded, setPrestigeAwarded] = useState(false)
 
   const track = useMemo(() => {
     if (!race) return null
     return getTracks.find((t: any) => t.id === race.config.trackId)
   }, [race, getTracks])
 
-  // Load existing results
+  // Load existing results and auto-award prestige
   useEffect(() => {
     if (race && race.state === 'finished' && race.results) {
       setResults(race.results)
-      setPrestigeAwarded(race.prestigeAwarded)
-    }
-  }, [race])
 
-  const handleAwardPrestige = () => {
-    if (!race || race.state !== 'finished' || prestigeAwarded) return
-    const result = awardPrestige()
-    if (result.ok) {
-      setPrestigeAwarded(true)
+      // Auto-award prestige if not already awarded
+      if (!race.prestigeAwarded) {
+        awardPrestige()
+      }
     }
-  }
+  }, [race, awardPrestige])
 
   const isFinished = race?.state === 'finished'
 
@@ -132,37 +127,13 @@ function HostedRaceView() {
                   </View>
                   {result.prestigeAwarded !== undefined && result.prestigeAwarded > 0 && (
                     <View style={styles.prestigeBadge}>
-                      <Ionicons name="star" size={14} color="#FFD700" />
+                      <Ionicons name="star" size={14} color="#9C27B0" />
                       <Text style={styles.prestigeText}>+{result.prestigeAwarded}</Text>
                     </View>
                   )}
                 </View>
               ))}
           </ScrollView>
-
-          {!prestigeAwarded && (
-            <Pressable
-              onPress={handleAwardPrestige}
-              style={({ pressed }) => [styles.awardButton, pressed && styles.awardButtonPressed]}
-            >
-              <Ionicons name="star" size={20} color="#fff" />
-              <Text style={styles.awardButtonText}>Award Prestige Points</Text>
-            </Pressable>
-          )}
-
-          {prestigeAwarded && (
-            <View style={styles.awardedBox}>
-              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-              <Text style={styles.awardedText}>Prestige points awarded!</Text>
-            </View>
-          )}
-
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
-          >
-            <Text style={styles.backButtonText}>Back to My Team</Text>
-          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -364,7 +335,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    backgroundColor: 'rgba(156, 39, 176, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -372,51 +343,6 @@ const styles = StyleSheet.create({
   prestigeText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#FFD700',
-  },
-  awardButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FFB300',
-    borderRadius: 12,
-    padding: 14,
-  },
-  awardButtonPressed: { opacity: 0.8 },
-  awardButtonText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  awardedBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(76, 175, 80, 0.3)',
-  },
-  awardedText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#4CAF50',
-  },
-  backButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  backButtonPressed: { opacity: 0.8 },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#fff',
+    color: '#9C27B0',
   },
 })

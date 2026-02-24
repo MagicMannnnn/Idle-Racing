@@ -398,7 +398,7 @@ export function useMyTeamRaceCars({
       packJitter: 0.0,
 
       // Hosted race laps
-      maxLap: race?.config?.laps ?? 5,
+      maxLap: race?.config?.laps ?? 3,
 
       startWaitTime: 1.0,
       maxOvertakeTime: 12.0,
@@ -634,16 +634,17 @@ export function useMyTeamRaceCars({
     pxRef.current = new Float32Array(carCount)
     pyRef.current = new Float32Array(carCount)
 
-    // Seed starting grid (reverse grid by effective rating, like your random race when ratings provided)
+    // Seed starting grid with random order (deterministic from seed)
     const packLen = Math.max(1, len * TUNE.packWindowFrac)
     const spacing = carCount > 1 ? packLen / (carCount - 1) : 0
     const anchor = len - 1e-3
 
-    const orderedIndices = Array.from({ length: carCount }, (_, i) => i).sort((a, b) => {
-      const ra = raceDrivers[a]?.effectiveRating ?? 0
-      const rb = raceDrivers[b]?.effectiveRating ?? 0
-      return ra - rb
-    })
+    // Fisher-Yates shuffle with seeded RNG for deterministic random grid order
+    const orderedIndices = Array.from({ length: carCount }, (_, i) => i)
+    for (let i = orderedIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[orderedIndices[i], orderedIndices[j]] = [orderedIndices[j], orderedIndices[i]]
+    }
 
     for (let posIdx = 0; posIdx < carCount; posIdx++) {
       const i = orderedIndices[posIdx]

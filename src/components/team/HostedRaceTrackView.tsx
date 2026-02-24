@@ -346,7 +346,7 @@ export function HostedRaceTrackView({
 
   // Track lap progress - sample max lap from all cars
   const [maxLapCompleted, setMaxLapCompleted] = useState(0)
-  const maxLaps = activeRace?.config?.laps ?? 5
+  const maxLaps = activeRace?.config?.laps ?? 3
 
   // Sample lap progress every 250ms
   useEffect(() => {

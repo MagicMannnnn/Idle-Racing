@@ -30,13 +30,6 @@ export function HostRaceModal({ visible, onClose }: Props) {
   const startRace = useMyTeamRaces((s: any) => s.startRace)
   const getCompetitorMean = useMyTeamRaces((s: any) => s.getCompetitorMean)
 
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
-  const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set())
-  const [fieldSize, setFieldSize] = useState(10)
-  const [laps, setLaps] = useState(3)
-  const [seedInput, setSeedInput] = useState('')
-  const [error, setError] = useState('')
-
   // Filter eligible drivers (hired + valid contract)
   const eligibleDrivers = useMemo(() => {
     const now = Date.now()
@@ -49,6 +42,23 @@ export function HostRaceModal({ visible, onClose }: Props) {
     })
   }, [drivers])
 
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
+  const [fieldSize, setFieldSize] = useState(Math.max(10, eligibleDrivers.length))
+  const [laps, setLaps] = useState(3)
+  const [seedInput, setSeedInput] = useState('')
+  const [error, setError] = useState('')
+
+  // Auto-select all eligible drivers
+  const selectedDriverIds = useMemo(
+    () => new Set(eligibleDrivers.map((d: any) => d.id)),
+    [eligibleDrivers],
+  )
+
+  // Update field size when eligible drivers change
+  React.useEffect(() => {
+    setFieldSize(Math.max(10, eligibleDrivers.length, fieldSize))
+  }, [eligibleDrivers.length])
+
   // Calculate car rating
   const carRating = useMemo(() => {
     return upgrades.reduce((sum: number, u: any) => sum + u.value, 0) / upgrades.length
@@ -60,21 +70,10 @@ export function HostRaceModal({ visible, onClose }: Props) {
   // Reset form
   const resetForm = () => {
     setSelectedTrackId(null)
-    setSelectedDriverIds(new Set())
-    setFieldSize(10)
+    setFieldSize(Math.max(10, eligibleDrivers.length))
     setLaps(3)
     setSeedInput('')
     setError('')
-  }
-
-  const toggleDriver = (driverId: string) => {
-    const newSet = new Set(selectedDriverIds)
-    if (newSet.has(driverId)) {
-      newSet.delete(driverId)
-    } else {
-      newSet.add(driverId)
-    }
-    setSelectedDriverIds(newSet)
   }
 
   const handleStartRace = () => {
@@ -86,8 +85,8 @@ export function HostRaceModal({ visible, onClose }: Props) {
       return
     }
 
-    if (selectedDriverIds.size === 0) {
-      setError('Please select at least one driver')
+    if (eligibleDrivers.length === 0) {
+      setError('No eligible drivers available')
       return
     }
 
@@ -96,8 +95,8 @@ export function HostRaceModal({ visible, onClose }: Props) {
       return
     }
 
-    if (fieldSize > 10) {
-      setError('Maximum field size is 10')
+    if (fieldSize > 20) {
+      setError('Maximum field size is 20')
       return
     }
 
@@ -181,6 +180,10 @@ export function HostRaceModal({ visible, onClose }: Props) {
             <Text style={styles.sectionTitle}>Race Information</Text>
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>My Team Drivers:</Text>
+                <Text style={styles.infoValue}>{eligibleDrivers.length}</Text>
+              </View>
+              <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Competitor Rating:</Text>
                 <Text style={styles.infoValue}>{competitorMean.toFixed(1)}★</Text>
               </View>
@@ -220,67 +223,26 @@ export function HostRaceModal({ visible, onClose }: Props) {
             )}
           </View>
 
-          {/* Driver Selection */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Select Drivers ({selectedDriverIds.size} selected)
-            </Text>
-            {eligibleDrivers.length === 0 ? (
-              <Text style={styles.emptyText}>
-                No eligible drivers available. Hire drivers with valid contracts.
-              </Text>
-            ) : (
-              <View style={styles.optionsList}>
-                {eligibleDrivers.map((driver: any) => {
-                  const effectiveRating = (driver.rating + carRating) / 2
-                  return (
-                    <Pressable
-                      key={driver.id}
-                      onPress={() => toggleDriver(driver.id)}
-                      style={[
-                        styles.optionItem,
-                        selectedDriverIds.has(driver.id) && styles.optionItemSelected,
-                      ]}
-                    >
-                      <View style={styles.optionContent}>
-                        <Text style={styles.optionText}>
-                          {driver.name} #{driver.number}
-                        </Text>
-                        <Text style={styles.optionSubtext}>
-                          Driver: {driver.rating.toFixed(1)}★ • Car: {carRating.toFixed(1)} •
-                          Effective: {effectiveRating.toFixed(1)}★
-                        </Text>
-                      </View>
-                      {selectedDriverIds.has(driver.id) && (
-                        <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                      )}
-                    </Pressable>
-                  )
-                })}
-              </View>
-            )}
-          </View>
-
           {/* Field Size */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Field Size (Total Racers)</Text>
             <View style={styles.fieldSizeRow}>
               <Pressable
-                onPress={() => setFieldSize(Math.max(selectedDriverIds.size, fieldSize - 1))}
+                onPress={() => setFieldSize(Math.max(10, fieldSize - 1))}
                 style={styles.fieldSizeButton}
               >
                 <Ionicons name="remove" size={24} color="#fff" />
               </Pressable>
               <Text style={styles.fieldSizeText}>{fieldSize}</Text>
               <Pressable
-                onPress={() => setFieldSize(Math.min(10, fieldSize + 1))}
+                onPress={() => setFieldSize(Math.min(20, fieldSize + 1))}
                 style={styles.fieldSizeButton}
               >
                 <Ionicons name="add" size={24} color="#fff" />
               </Pressable>
             </View>
             <Text style={styles.fieldSizeHint}>
-              {selectedDriverIds.size} My Team + {fieldSize - selectedDriverIds.size} AI
+              {eligibleDrivers.length} My Team + {fieldSize - eligibleDrivers.length} AI
             </Text>
           </View>
 
@@ -330,10 +292,24 @@ export function HostRaceModal({ visible, onClose }: Props) {
             </View>
           ) : null}
 
+          {eligibleDrivers.length === 0 && (
+            <View style={styles.warningBox}>
+              <Ionicons name="information-circle" size={20} color="#FF9800" />
+              <Text style={styles.warningText}>
+                No eligible drivers. Hire drivers with valid contracts to host races.
+              </Text>
+            </View>
+          )}
+
           {/* Start Button */}
           <Pressable
             onPress={handleStartRace}
-            style={({ pressed }) => [styles.startButton, pressed && styles.startButtonPressed]}
+            disabled={eligibleDrivers.length === 0 || !selectedTrackId}
+            style={({ pressed }) => [
+              styles.startButton,
+              pressed && styles.startButtonPressed,
+              (eligibleDrivers.length === 0 || !selectedTrackId) && styles.startButtonDisabled,
+            ]}
           >
             <Text style={styles.startButtonText}>Start Race</Text>
             <Ionicons name="flag" size={20} color="#fff" />
@@ -498,6 +474,22 @@ const styles = StyleSheet.create({
     color: '#F44336',
     fontWeight: '600',
   },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 152, 0, 0.15)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 152, 0, 0.4)',
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FF9800',
+    fontWeight: '600',
+  },
   startButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -510,6 +502,10 @@ const styles = StyleSheet.create({
   },
   startButtonPressed: {
     opacity: 0.8,
+  },
+  startButtonDisabled: {
+    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+    opacity: 0.5,
   },
   startButtonText: {
     fontSize: 18,
