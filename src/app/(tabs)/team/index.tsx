@@ -1,7 +1,8 @@
+import { HostRaceModal } from '@components/team/HostRaceModal'
 import { Ionicons } from '@expo/vector-icons'
 import { useTeam } from '@state/useTeam'
 import { router } from 'expo-router'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -63,6 +64,8 @@ export default function TeamIndex() {
   const drivers = useTeam((s: any) => s.drivers)
   const upgrades = useTeam((s: any) => s.upgrades)
   const tick = useTeam((s: any) => s.tick)
+
+  const [hostRaceModalVisible, setHostRaceModalVisible] = useState(false)
 
   // Tick every 100ms to update progress bars
   useEffect(() => {
@@ -135,7 +138,25 @@ export default function TeamIndex() {
           onPress={() => router.push('/team/upgrades' as any)}
           upgrading={activeUpgrades > 0}
         />
+
+        {/* Host Race Button */}
+        <Pressable
+          onPress={() => setHostRaceModalVisible(true)}
+          style={({ pressed }) => [styles.hostRaceButton, pressed && styles.hostRaceButtonPressed]}
+        >
+          <Ionicons name="flag" size={24} color="#fff" />
+          <View style={styles.hostRaceTextContainer}>
+            <Text style={styles.hostRaceTitle}>Host Race</Text>
+            <Text style={styles.hostRaceSubtitle}>Test your drivers against AI competitors</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" />
+        </Pressable>
       </ScrollView>
+
+      <HostRaceModal
+        visible={hostRaceModalVisible}
+        onClose={() => setHostRaceModalVisible(false)}
+      />
     </SafeAreaView>
   )
 }
@@ -227,4 +248,42 @@ const styles = StyleSheet.create({
   },
   viewBtnPressed: { transform: [{ scale: 0.99 }], opacity: 0.95 },
   viewBtnText: { color: '#0B0F14', fontWeight: '900', fontSize: 16 },
+
+  hostRaceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 18,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  hostRaceButtonPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
+  },
+  hostRaceTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  hostRaceTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+  },
+  hostRaceSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+  },
 })
