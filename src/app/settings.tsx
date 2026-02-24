@@ -4,6 +4,7 @@ import { useMoney } from '@state/useMoney'
 import { useOnboarding } from '@state/useOnboarding'
 import { usePrestige } from '@state/usePrestige'
 import { useSettings } from '@state/useSettings'
+import { useTeam } from '@state/useTeam'
 import { useTrackMaps } from '@state/useTrackMaps'
 import { useTracks } from '@state/useTracks'
 import { router } from 'expo-router'
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   const resetMaps = useTrackMaps((s: any) => s.resetAll)
   const resetSettings = useSettings((s: any) => s.reset)
   const resetPrestige = usePrestige((s: any) => s.reset)
+  const resetTeams = useTeam((s: any) => s.reset)
 
   const enlargedLeader = useSettings((s: any) => s.enlargedLeader)
   const setEnlargedLeader = useSettings((s: any) => s.setEnlargedLeader)
@@ -42,25 +44,35 @@ export default function SettingsScreen() {
   const isWeb = Platform.OS === 'web'
 
   function doReset() {
-    resetOnboarding()
-    resetMoney()
-    resetTracks()
-    resetEvents()
-    resetMaps()
-    resetSettings()
-    resetPrestige()
+    //resetOnboarding()
+    //resetMoney()
+    //resetTracks()
+    //resetEvents()
+    //resetMaps()
+    //resetSettings()
+    //resetPrestige()
+    resetTeams()
     router.replace('/')
   }
 
   function handleReset() {
-    Alert.alert(
-      'Reset everything?',
-      'This will clear all progress, tracks, events, maps, and settings. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: doReset },
-      ],
-    )
+    if (Platform.OS === 'web') {
+      const confirmed = confirm(
+        'Reset everything?\n\nThis will clear all progress, tracks, events, maps, and settings. This cannot be undone.',
+      )
+      if (confirmed) {
+        doReset()
+      }
+    } else {
+      Alert.alert(
+        'Reset everything?',
+        'This will clear all progress, tracks, events, maps, and settings. This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Reset', style: 'destructive', onPress: doReset },
+        ],
+      )
+    }
   }
 
   const speedIsDefault = speedVariance === DEFAULT_SPEED_VARIANCE
