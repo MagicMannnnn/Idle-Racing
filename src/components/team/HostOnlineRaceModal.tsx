@@ -36,6 +36,8 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
     error,
     setError,
   } = useOnlineRaces()
+  // Import useTrackMaps for grid access
+  const trackGridGetter = require('@state/useTrackMaps').useTrackMaps
 
   // Filter eligible drivers (hired + valid contract)
   const eligibleDrivers = useMemo(() => {
@@ -155,10 +157,17 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
       return
     }
 
-    // Get track data
+    // Get track data and grid
     const track = tracks.find((t: any) => t.id === selectedTrackId)
     if (!track) {
       setLocalError('Invalid track selected')
+      return
+    }
+    // Get grid from useTrackMaps
+    const trackMapsState = trackGridGetter.getState()
+    const grid = trackMapsState.get(track.id)
+    if (!grid || !grid.cells) {
+      setLocalError('Track grid not found')
       return
     }
 
@@ -181,6 +190,7 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
         laps,
         aiCount,
         userId,
+        grid: { size: grid.size, cells: grid.cells },
       },
       (response) => {
         console.log('[HostOnlineRaceModal] Create race response:', response)
