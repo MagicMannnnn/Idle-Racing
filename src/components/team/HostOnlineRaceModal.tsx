@@ -52,6 +52,7 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
   const [raceID, setRaceID] = useState('')
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [laps, setLaps] = useState(3)
+  const [aiCount, setAiCount] = useState(0)
   const [localError, setLocalError] = useState('')
   const [inLobby, setInLobby] = useState(false)
   const [hostUserId, setHostUserId] = useState('')
@@ -85,12 +86,24 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
 
   // Convert drivers to online race format
   const onlineDrivers = useMemo(() => {
-    return eligibleDrivers.map((d: any) => ({
+    const userDrivers = eligibleDrivers.map((d: any) => ({
       name: d.name,
       number: d.number,
       rating: (d.rating + carRating) / 2, // Average of driver and car rating
     }))
-  }, [eligibleDrivers, carRating])
+
+    // Add AI drivers if aiCount > 0
+    const aiDrivers =
+      aiCount > 0
+        ? Array.from({ length: aiCount }, (_, i) => ({
+            name: `AI ${i + 1}`,
+            number: 100 + i,
+            rating: carRating, // Use car rating for AI
+          }))
+        : []
+
+    return [...userDrivers, ...aiDrivers]
+  }, [eligibleDrivers, carRating, aiCount])
 
   // Copy race ID to clipboard
   const handleCopyRaceID = () => {
@@ -105,6 +118,7 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
     setRaceID('')
     setSelectedTrackId(null)
     setLaps(3)
+    setAiCount(0)
     setLocalError('')
     setError(null)
     setInLobby(false)
@@ -155,7 +169,7 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
       raceID: raceID.trim(),
       track: track.name,
       laps,
-      aiCount: 0,
+      aiCount,
       userId,
     })
 
@@ -165,7 +179,7 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
         raceID: raceID.trim(),
         track: track.name,
         laps,
-        aiCount: 0,
+        aiCount,
         userId,
       },
       (response) => {
@@ -349,17 +363,17 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
               <Text style={styles.sectionTitle}>Number of Laps</Text>
               <View style={styles.fieldSizeRow}>
                 <Pressable
-                  onPress={() => setLaps(Math.max(3, laps - 1))}
-                  disabled={laps === 3 || !!currentRace}
+                  onPress={() => setLaps(Math.max(1, laps - 1))}
+                  disabled={laps === 1 || !!currentRace}
                   style={[
                     styles.fieldSizeButton,
-                    (laps === 3 || currentRace) && styles.fieldSizeButtonDisabled,
+                    (laps === 1 || currentRace) && styles.fieldSizeButtonDisabled,
                   ]}
                 >
                   <Ionicons
                     name="remove"
                     size={24}
-                    color={laps === 3 || currentRace ? '#666' : '#fff'}
+                    color={laps === 1 || currentRace ? '#666' : '#fff'}
                   />
                 </Pressable>
                 <Text style={styles.fieldSizeText}>{laps}</Text>
@@ -380,6 +394,49 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
               </View>
               <Text style={styles.fieldSizeHint}>
                 Race completes when leader finishes {laps} laps
+              </Text>
+            </View>
+          )}
+
+          {/* AI Count Configuration - Only show before race is created */}
+          {!inLobby && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>AI Opponents</Text>
+              <View style={styles.fieldSizeRow}>
+                <Pressable
+                  onPress={() => setAiCount(Math.max(0, aiCount - 1))}
+                  disabled={aiCount === 0 || !!currentRace}
+                  style={[
+                    styles.fieldSizeButton,
+                    (aiCount === 0 || currentRace) && styles.fieldSizeButtonDisabled,
+                  ]}
+                >
+                  <Ionicons
+                    name="remove"
+                    size={24}
+                    color={aiCount === 0 || currentRace ? '#666' : '#fff'}
+                  />
+                </Pressable>
+                <Text style={styles.fieldSizeText}>{aiCount}</Text>
+                <Pressable
+                  onPress={() => setAiCount(Math.min(20, aiCount + 1))}
+                  disabled={aiCount === 20 || !!currentRace}
+                  style={[
+                    styles.fieldSizeButton,
+                    (aiCount === 20 || currentRace) && styles.fieldSizeButtonDisabled,
+                  ]}
+                >
+                  <Ionicons
+                    name="add"
+                    size={24}
+                    color={aiCount === 20 || currentRace ? '#666' : '#fff'}
+                  />
+                </Pressable>
+              </View>
+              <Text style={styles.fieldSizeHint}>
+                {aiCount === 0
+                  ? 'Players only - no AI opponents'
+                  : `${aiCount} AI ${aiCount === 1 ? 'opponent' : 'opponents'} will join the race`}
               </Text>
             </View>
           )}

@@ -419,7 +419,9 @@ export function useMyTeamRaceCars({
 
       collideNeighbors: 3,
 
-      packWindowFrac: 0.16,
+      // For online races with few drivers, use tighter grid spacing
+      // For 2-5 drivers: 0.05 (5% of track), for 6-10: 0.08, for 11+: 0.16
+      packWindowFrac: race?.isOnline ? (carCount <= 5 ? 0.05 : carCount <= 10 ? 0.08 : 0.16) : 0.16,
       packJitter: 0.0,
 
       // Hosted race laps (finish at start of next lap)
@@ -436,7 +438,7 @@ export function useMyTeamRaceCars({
 
       publishHz: 30,
     }
-  }, [race?.config?.laps, carCount])
+  }, [race?.config?.laps, race?.isOnline, carCount])
 
   const computeDir = useCallback(
     (from: number, to: number): Dir => {
@@ -725,7 +727,17 @@ export function useMyTeamRaceCars({
 
     didLayoutRef.current = false
     setCars(created)
-  }, [race, raceId, carCount, len, stop, TUNE.baseSpeed, TUNE.packWindowFrac, ratingMulSmall])
+  }, [
+    race,
+    raceId,
+    carCount,
+    len,
+    stop,
+    TUNE.baseSpeed,
+    TUNE.packWindowFrac,
+    race?.isOnline,
+    ratingMulSmall,
+  ])
 
   const start = useCallback(() => {
     if (runningRef.current) return
