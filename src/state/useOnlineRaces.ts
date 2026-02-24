@@ -1,6 +1,11 @@
 import Constants from 'expo-constants'
+import { router } from 'expo-router'
 import { io, Socket } from 'socket.io-client'
 import { create } from 'zustand'
+
+import { type RaceDriverSnapshot, useMyTeamRaces } from './useMyTeamRaces'
+import { useTrackMaps } from './useTrackMaps'
+import { useTracks } from './useTracks'
 
 /**
  * Online race configuration
@@ -126,12 +131,100 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
 
     newSocket.on('race:started', (payload) => {
       console.log('[Online Races] Race started:', payload)
+      const config = payload.config as OnlineRaceState
+
       // Update current race state
       set((state) => ({
         currentRace: state.currentRace
           ? { ...state.currentRace, started: true, startedAt: payload.startedAt }
           : null,
       }))
+
+      // Convert online race to HostedRace format and store in useMyTeamRaces
+      if (config && config.drivers && config.drivers.length > 0) {
+        // Look up track by name
+        const tracksState = useTracks.getState()
+        const track = tracksState.tracks.find((t: any) => t.name === config.track)
+
+        if (!track) {
+          console.error('[Online Races] Track not found:', config.track)
+          return
+        }
+
+        console.log('[Online Races] Found track:', track.id, track.name)
+
+        // Ensure track map is loaded and get grid
+        const trackMapsState = useTrackMaps.getState()
+        trackMapsState.ensure(track.id)
+        const grid = trackMapsState.get(track.id)
+
+        if (!grid || !grid.cells) {
+          console.error('[Online Races] Track grid not available:', track.id)
+          return
+        }
+
+        console.log(
+          '[Online Races] Track grid loaded, size:',
+          grid.size,
+          'cells:',
+          grid.cells.length,
+        )
+
+        // Extract track loop
+        const trackLoop: number[] = []
+        for (let i = 0; i < grid.cells.length; i++) {
+          if (grid.cells[i] === 'track') {
+            trackLoop.push(i)
+          }
+        }
+
+        if (trackLoop.length === 0) {
+          console.error('[Online Races] Track has no racing line:', track.id)
+          return
+        }
+
+        console.log('[Online Races] Track loop extracted, length:', trackLoop.length)
+
+        const raceDrivers: RaceDriverSnapshot[] = config.drivers.map((driver, index) => ({
+          driverId: `online_${driver.number}_${index}`,
+          driverName: driver.name,
+          driverNumber: driver.number,
+          driverRating: driver.rating,
+          carRating: driver.rating, // For online races, treat as equal
+          effectiveRating: driver.rating,
+          driverVariation: 0, // Will be calculated by race simulation
+          isMyTeam: false, // All drivers in online race treated as competitors
+        }))
+
+        const hostedRace = {
+          config: {
+            id: config.raceID,
+            seed: config.raceID, // Use race ID as seed for deterministic simulation
+            trackId: track.id,
+            trackLoop,
+            trackWidth: grid.size,
+            driverIds: [], // Not used for online races
+            competitorMean: 3.0,
+            fieldSize: config.drivers.length,
+            laps: config.laps,
+            createdAt: config.updatedAt,
+          },
+          state: 'running' as const,
+          startedAt: payload.startedAt,
+          drivers: raceDrivers,
+          prestigeAwarded: false,
+        }
+
+        console.log('[Online Races] Created HostedRace:', hostedRace.config.id)
+
+        // Store in useMyTeamRaces
+        const myTeamRacesState = useMyTeamRaces.getState()
+        myTeamRacesState.setActiveRace(hostedRace)
+
+        // Navigate to race viewer
+        console.log('[Online Races] Navigating to race viewer')
+        router.push('/race' as any)
+      }
     })
 
     newSocket.on('race:user_joined', (payload) => {

@@ -82,6 +82,7 @@ type MyTeamRacesState = {
   createRace: (
     config: Omit<HostedRaceConfig, 'id' | 'createdAt'>,
   ) => { ok: true; race: HostedRace } | { ok: false; reason: string }
+  setActiveRace: (race: HostedRace) => void
   startRace: () => { ok: true } | { ok: false; reason: string }
   finishRace: (results: HostedRaceResultRow[]) => void
   cancelRace: () => void
@@ -100,6 +101,7 @@ type MyTeamRacesData = Pick<MyTeamRacesState, 'activeRace' | 'history' | 'compet
 type MyTeamRacesActions = Pick<
   MyTeamRacesState,
   | 'createRace'
+  | 'setActiveRace'
   | 'startRace'
   | 'finishRace'
   | 'cancelRace'
@@ -187,6 +189,7 @@ function createInitialState(): MyTeamRacesData {
 
 type Action =
   | { type: 'CREATE_RACE'; race: HostedRace }
+  | { type: 'SET_ACTIVE_RACE'; race: HostedRace }
   | { type: 'START_RACE'; startedAt: number }
   | { type: 'FINISH_RACE'; results: HostedRaceResultRow[]; finishedAt: number; adjustment: number }
   | { type: 'CANCEL_RACE' }
@@ -197,6 +200,13 @@ type Action =
 function reducer(state: MyTeamRacesData, action: Action): MyTeamRacesData {
   switch (action.type) {
     case 'CREATE_RACE': {
+      return {
+        ...state,
+        activeRace: action.race,
+      }
+    }
+
+    case 'SET_ACTIVE_RACE': {
       return {
         ...state,
         activeRace: action.race,
@@ -334,6 +344,10 @@ function createActions(
       dispatch({ type: 'CREATE_RACE', race })
 
       return { ok: true, race }
+    },
+
+    setActiveRace: (race: HostedRace) => {
+      dispatch({ type: 'SET_ACTIVE_RACE', race })
     },
 
     startRace: () => {

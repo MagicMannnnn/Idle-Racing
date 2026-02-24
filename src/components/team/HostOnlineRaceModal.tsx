@@ -71,6 +71,13 @@ export function HostOnlineRaceModal({ visible, onClose }: Props) {
     }
   }, [visible, connect])
 
+  // Auto-close modal when race starts (navigation handled by socket listener)
+  useEffect(() => {
+    if (currentRace?.started && inLobby) {
+      handleClose()
+    }
+  }, [currentRace?.started, inLobby])
+
   // Calculate car rating
   const carRating = useMemo(() => {
     return upgrades.reduce((sum: number, u: any) => sum + u.value, 0) / upgrades.length

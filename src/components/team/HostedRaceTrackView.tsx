@@ -365,9 +365,20 @@ export function HostedRaceTrackView({
 
   // Determine if we should show cars and run simulation
   useEffect(() => {
-    const hasDrivers = driverIds.length > 0
+    // Check if we have drivers - either from driverIds (AI race) or from race.drivers (online race)
+    const hasDrivers =
+      driverIds.length > 0 || (activeRace?.drivers && activeRace.drivers.length > 0)
     const isRunning = activeRace?.state === 'running'
     const raceFinished = activeRace?.state === 'finished' || isFinished
+
+    console.log(
+      '[HostedRaceTrackView] hasDrivers:',
+      hasDrivers,
+      'isRunning:',
+      isRunning,
+      'raceFinished:',
+      raceFinished,
+    )
 
     // Show cars if we have drivers and race is running or just finished
     const shouldShow = hasDrivers && (isRunning || raceFinished)
@@ -380,7 +391,7 @@ export function HostedRaceTrackView({
     setEntertainmentValue(0.5)
 
     if (shouldRun) needsNewRaceRef.current = true
-  }, [driverIds.length, activeRace?.state, isFinished])
+  }, [driverIds.length, activeRace?.state, activeRace?.drivers, isFinished])
 
   // hard stop when not focused or not running sim
   useEffect(() => {
@@ -629,11 +640,13 @@ export function HostedRaceTrackView({
   }, [cells, mapSize, trackKerbsByIndex])
 
   // Filter out finished cars from track display, but keep them for leaderboard
+  const hasDriversInRace =
+    driverIds.length > 0 || (activeRace?.drivers && activeRace.drivers.length > 0)
   const displayCarsOnTrack = useMemo(
-    () => (driverIds.length > 0 ? cars.filter((c) => !c.finished.value) : []),
-    [cars, driverIds.length],
+    () => (hasDriversInRace ? cars.filter((c) => !c.finished.value) : []),
+    [cars, hasDriversInRace],
   )
-  const displayCars = driverIds.length > 0 ? cars : []
+  const displayCars = hasDriversInRace ? cars : []
 
   // Format lap display
   const lapDisplay = useMemo(() => {

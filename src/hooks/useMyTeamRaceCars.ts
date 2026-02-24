@@ -226,6 +226,18 @@ function generateAIDrivers(
 }
 
 function createRaceDrivers(race: HostedRace, rand: () => number): RaceDriverSnapshot[] {
+  // If race already has drivers (e.g., from online race), use those but add variation
+  if (race.drivers && race.drivers.length > 0) {
+    console.log('[useMyTeamRaceCars] Using existing drivers from race:', race.drivers.length)
+    // Add deterministic variation to each driver based on race seed
+    return race.drivers.map((driver) => ({
+      ...driver,
+      driverVariation: (rand() * 2 - 1) * 0.1, // Generate variation from race seed
+    }))
+  }
+
+  console.log('[useMyTeamRaceCars] Creating drivers from team state')
+  // Otherwise, create drivers from team state (for local AI races)
   const teamState = useTeam.getState()
   const drivers: RaceDriverSnapshot[] = []
   const usedNumbers = new Set<number>()
@@ -542,7 +554,16 @@ export function useMyTeamRaceCars({
 
   // Init / reset when race changes
   useEffect(() => {
+    console.log(
+      '[useMyTeamRaceCars] useEffect triggered. Race:',
+      race?.config.id,
+      'carCount:',
+      carCount,
+      'len:',
+      len,
+    )
     if (!race || race.config.id !== raceId || carCount <= 0 || len <= 0) {
+      console.log('[useMyTeamRaceCars] Skipping init - invalid state')
       stop()
       setCars([])
       setDrivers([])
@@ -552,6 +573,7 @@ export function useMyTeamRaceCars({
       return
     }
 
+    console.log('[useMyTeamRaceCars] Initializing race:', raceId)
     stop()
     setIsFinished(false)
 
@@ -565,6 +587,7 @@ export function useMyTeamRaceCars({
     const rand = mulberry32(seed)
 
     const raceDrivers = createRaceDrivers(race, rand)
+    console.log('[useMyTeamRaceCars] Race drivers created:', raceDrivers.length, raceDrivers)
     setDrivers(raceDrivers)
 
     // Create car anims
@@ -597,6 +620,7 @@ export function useMyTeamRaceCars({
         colorHex: colors[i % colors.length],
       })
     }
+    console.log('[useMyTeamRaceCars] Created cars:', created.length)
     idsRef.current = ids
 
     // Allocate refs (mirrors useTrackCars)
