@@ -52,62 +52,10 @@ export type HQ = {
   maxDriverRating: number // 1-5, unlocks as HQ levels up
 }
 
-export type ActiveTeamRace = {
-  trackId: string
-  duration: number // minutes
-  startedAt: number
-  seed: number // for deterministic race simulation
-  meanCompetitorRating: number // mean rating of competitor field
-  // Optional fields set when race finishes
-  finishedAt?: number
-  position?: number
-  totalCars?: number
-  teamAverageRating?: number
-  knowledgeAwarded?: boolean // Track if knowledge points were already awarded for this race
-}
-
-export type RaceResult = {
-  trackId: string
-  trackName: string
-  duration: number
-  finishedAt: number
-  position: number // 1-based, 1 = first place
-  totalCars: number
-  seed: number // For deterministic replay
-  startedAt: number // When race started, for deterministic replay
-}
-
-export type LastTeamRace = {
-  trackId: string
-  trackName: string
-  duration: number
-  seed: number
-  startedAt: number
-  teamAverageRating: number
-  position: number
-  totalCars: number
-  meanCompetitorRating: number
-}
-
-export type TeamRaceLeaderboardEntry = {
-  position: number
-  rating: number
-  isTeam: boolean
-  name: string
-  laps: number
-  gap: number
-  knowledgePoints: number
-}
-
 type TeamState = {
   hq: HQ
   drivers: Driver[]
   upgrades: CarUpgrade[]
-  activeRace?: ActiveTeamRace
-  lastRaceResult?: RaceResult
-  lastTeamRace?: LastTeamRace
-  lastLeaderboardResults?: TeamRaceLeaderboardEntry[]
-  meanCompetitorRating: number // Starts at 1.0, adjusts based on performance
 
   // HQ functions
   quoteHQUpgrade: () =>
@@ -127,23 +75,6 @@ type TeamState = {
 
   // Driver functions
   getDriverSlots: () => number // equals maxDriverRating (1-5)
-
-  // Team race functions
-  getMeanCompetitorRating: () => number
-  startTeamRace: (
-    trackId: string,
-    duration: number,
-  ) => { ok: true } | { ok: false; reason: 'no_drivers' | 'already_racing' }
-  finishTeamRace: (
-    position: number,
-    totalCars: number,
-    teamAverageRating: number,
-    earnedPrestige: boolean,
-    knowledgeAwarded?: boolean,
-    leaderboardResults?: TeamRaceLeaderboardEntry[],
-  ) => void
-  clearTeamRace: () => void
-  getActiveRace: () => ActiveTeamRace | undefined
 
   quoteDriver: (
     rating: number,
@@ -363,11 +294,6 @@ function createInitialState(): Omit<TeamState, keyof ReturnType<typeof createAct
     },
     drivers: [],
     upgrades,
-    activeRace: undefined,
-    lastRaceResult: undefined,
-    lastTeamRace: undefined,
-    lastLeaderboardResults: undefined,
-    meanCompetitorRating: 1.0, // Starts at 1.0
   }
 }
 
@@ -375,28 +301,6 @@ type Action =
   | { type: 'UPGRADE_HQ'; cost: number; toLevel: number; time: number; now: number }
   | { type: 'HIRE_DRIVER'; driver: Driver; cost: number; time: number; now: number }
   | { type: 'FIRE_DRIVER'; driverId: string }
-  | {
-      type: 'START_TEAM_RACE'
-      trackId: string
-      duration: number
-      now: number
-      seed: number
-      meanCompetitorRating: number
-    }
-  | {
-      type: 'FINISH_TEAM_RACE'
-      position: number
-      totalCars: number
-      teamAverageRating: number
-      earnedPrestige: boolean
-      knowledgeAwarded?: boolean
-      leaderboardResults?: TeamRaceLeaderboardEntry[]
-    }
-  | { type: 'CLEAR_TEAM_RACE' }
-  | { type: 'STOP_TEAM_RACE'; result?: RaceResult; lastTeamRace?: LastTeamRace }
-  | { type: 'CLEAR_RACE_RESULT' }
-  | { type: 'SET_LAST_TEAM_RACE'; race: LastTeamRace }
-  | { type: 'CLEAR_LAST_TEAM_RACE' }
   | {
       type: 'UPGRADE_CAR'
       upgradeType: UpgradeType
@@ -452,89 +356,6 @@ function reducer(
       return {
         ...state,
         drivers: state.drivers.filter((d) => d.id !== action.driverId),
-      }
-    }
-
-    case 'START_TEAM_RACE': {
-      return {
-        ...state,
-        activeRace: {
-          trackId: action.trackId,
-          duration: action.duration,
-          startedAt: action.now,
-          seed: action.seed,
-          meanCompetitorRating: action.meanCompetitorRating,
-        },
-        lastTeamRace: undefined, // Clear previous race results when starting new race
-      }
-    }
-
-    case 'FINISH_TEAM_RACE': {
-      if (!state.activeRace) return state
-
-      // Adjust mean competitor rating based on performance
-      let newMeanRating = state.meanCompetitorRating
-      const maxRating = state.hq.maxDriverRating - 0.5
-
-      if (action.position === 1) {
-        // Won the race - increase difficulty by 0.1-0.2
-        const increase = 0.1 + Math.random() * 0.1
-        newMeanRating = Math.min(maxRating, newMeanRating + increase)
-      } else {
-        // Didn't win - decrease difficulty by 0.01-0.03
-        const decrease = 0.01 + Math.random() * 0.02
-        newMeanRating = Math.max(1.0, newMeanRating - decrease)
-      }
-
-      return {
-        ...state,
-        meanCompetitorRating: newMeanRating,
-        lastLeaderboardResults: action.leaderboardResults ?? state.lastLeaderboardResults,
-        activeRace: {
-          ...state.activeRace,
-          finishedAt: Date.now(),
-          position: action.position,
-          totalCars: action.totalCars,
-          teamAverageRating: action.teamAverageRating,
-          knowledgeAwarded: action.knowledgeAwarded ?? state.activeRace.knowledgeAwarded,
-        },
-      }
-    }
-
-    case 'CLEAR_TEAM_RACE': {
-      return {
-        ...state,
-        activeRace: undefined,
-      }
-    }
-
-    case 'STOP_TEAM_RACE': {
-      return {
-        ...state,
-        activeRace: undefined,
-        lastRaceResult: action.result,
-        lastTeamRace: action.lastTeamRace ?? state.lastTeamRace,
-      }
-    }
-
-    case 'CLEAR_RACE_RESULT': {
-      return {
-        ...state,
-        lastRaceResult: undefined,
-      }
-    }
-
-    case 'SET_LAST_TEAM_RACE': {
-      return {
-        ...state,
-        lastTeamRace: action.race,
-      }
-    }
-
-    case 'CLEAR_LAST_TEAM_RACE': {
-      return {
-        ...state,
-        lastTeamRace: undefined,
       }
     }
 
@@ -666,18 +487,6 @@ function reducer(
         return upgrade
       })
 
-      // Check if active race has ended (based on duration)
-      // Don't clear if race has already been finished (results need to persist)
-      // Add grace period after finishedAt is set to allow results to be viewed
-      if (newState.activeRace && newState.activeRace.finishedAt) {
-        // Race is finished - allow results to persist for viewing
-        // Clear after 5 minutes to prevent stale data
-        const resultsPersistTime = 300000
-        if (action.now >= newState.activeRace.finishedAt + resultsPersistTime) {
-          newState.activeRace = undefined
-        }
-      }
-
       return newState
     }
 
@@ -756,11 +565,6 @@ function createActions(
     getDriverSlots: () => {
       const state = getState()
       return state.hq.maxDriverRating
-    },
-
-    getMeanCompetitorRating: () => {
-      const state = getState()
-      return state.meanCompetitorRating
     },
 
     quoteDriver: (rating: number, contractLength: number) => {
@@ -860,76 +664,6 @@ function createActions(
 
       dispatch({ type: 'FIRE_DRIVER', driverId })
       return { ok: true as const }
-    },
-
-    startTeamRace: (trackId: string, duration: number) => {
-      const state = getState()
-      const hiredDrivers = state.drivers.filter((d) => d.hiringProgress === undefined)
-
-      if (hiredDrivers.length === 0) {
-        return { ok: false as const, reason: 'no_drivers' as const }
-      }
-
-      // Only prevent if there's an unfinished race in progress
-      if (state.activeRace && !state.activeRace.finishedAt) {
-        return { ok: false as const, reason: 'already_racing' as const }
-      }
-
-      const now = Date.now()
-      const seed = (now ^ (trackId.length << 16) ^ 0x9e3779b9) >>> 0
-
-      dispatch({
-        type: 'START_TEAM_RACE',
-        trackId,
-        duration,
-        now,
-        seed,
-        meanCompetitorRating: state.meanCompetitorRating,
-      })
-      return { ok: true as const }
-    },
-
-    stopTeamRace: (result?: RaceResult, lastTeamRace?: LastTeamRace) => {
-      dispatch({ type: 'STOP_TEAM_RACE', result, lastTeamRace })
-    },
-
-    finishTeamRace: (
-      position: number,
-      totalCars: number,
-      teamAverageRating: number,
-      earnedPrestige: boolean,
-      knowledgeAwarded?: boolean,
-      leaderboardResults?: TeamRaceLeaderboardEntry[],
-    ) => {
-      dispatch({
-        type: 'FINISH_TEAM_RACE',
-        position,
-        totalCars,
-        teamAverageRating,
-        earnedPrestige,
-        knowledgeAwarded,
-        leaderboardResults,
-      })
-    },
-
-    clearTeamRace: () => {
-      dispatch({ type: 'CLEAR_TEAM_RACE' })
-    },
-
-    clearRaceResult: () => {
-      dispatch({ type: 'CLEAR_RACE_RESULT' })
-    },
-
-    setLastTeamRace: (race: LastTeamRace) => {
-      dispatch({ type: 'SET_LAST_TEAM_RACE', race })
-    },
-
-    clearLastTeamRace: () => {
-      dispatch({ type: 'CLEAR_LAST_TEAM_RACE' })
-    },
-
-    getActiveRace: () => {
-      return getState().activeRace
     },
 
     quoteCarUpgrade: (type: UpgradeType, mode: UpgradeMode) => {
