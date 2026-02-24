@@ -161,20 +161,32 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
           return
         }
         // Use grid from server if present, else local
-        let grid = config.grid
-        if (!grid) {
+        let gridSize: number | undefined
+        let gridCells: string[] | undefined
+        if (
+          config.grid &&
+          Array.isArray(config.grid.cells) &&
+          typeof config.grid.size === 'number'
+        ) {
+          gridSize = config.grid.size
+          gridCells = config.grid.cells
+        } else {
           const trackMapsState = useTrackMaps.getState()
           trackMapsState.ensure(track.id)
-          grid = trackMapsState.get(track.id)
+          const localGrid = trackMapsState.get(track.id)
+          if (localGrid) {
+            gridSize = localGrid.size
+            gridCells = localGrid.cells
+          }
         }
-        if (!grid || !grid.cells) {
+        if (!gridSize || !gridCells) {
           console.error('[Online Races] Track grid not available:', track.id)
           return
         }
         // Extract track loop
         const trackLoop: number[] = []
-        for (let i = 0; i < grid.cells.length; i++) {
-          if (grid.cells[i] === 'track') {
+        for (let i = 0; i < gridCells.length; i++) {
+          if (gridCells[i] === 'track') {
             trackLoop.push(i)
           }
         }
@@ -198,7 +210,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
             seed: config.raceID, // Use race ID as seed for deterministic simulation
             trackId: track.id,
             trackLoop,
-            trackWidth: grid.size,
+            trackWidth: gridSize,
             driverIds: [], // Not used for online races
             competitorMean: 3.0,
             fieldSize: config.drivers.length,
