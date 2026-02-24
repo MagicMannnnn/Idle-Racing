@@ -44,13 +44,13 @@ export default function SettingsScreen() {
   const isWeb = Platform.OS === 'web'
 
   function doReset() {
-    //resetOnboarding()
-    //resetMoney()
-    //resetTracks()
-    //resetEvents()
-    //resetMaps()
-    //resetSettings()
-    //resetPrestige()
+    resetOnboarding()
+    resetMoney()
+    resetTracks()
+    resetEvents()
+    resetMaps()
+    resetSettings()
+    resetPrestige()
     resetTeams()
     router.replace('/')
   }
