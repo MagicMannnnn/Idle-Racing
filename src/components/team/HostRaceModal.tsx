@@ -6,13 +6,13 @@ import { useTracks } from '@state/useTracks'
 import { router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
 import {
+  Clipboard,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native'
 
@@ -45,14 +45,24 @@ export function HostRaceModal({ visible, onClose }: Props) {
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [fieldSize, setFieldSize] = useState(Math.max(10, eligibleDrivers.length))
   const [laps, setLaps] = useState(3)
-  const [seedInput, setSeedInput] = useState('')
   const [error, setError] = useState('')
+
+  // Generate random seed once
+  const raceSeed = useMemo(
+    () => `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    [visible],
+  )
 
   // Auto-select all eligible drivers
   const selectedDriverIds = useMemo(
     () => new Set(eligibleDrivers.map((d: any) => d.id)),
     [eligibleDrivers],
   )
+
+  // Copy seed to clipboard
+  const handleCopySeed = () => {
+    Clipboard.setString(raceSeed)
+  }
 
   // Update field size when eligible drivers change
   React.useEffect(() => {
@@ -64,6 +74,15 @@ export function HostRaceModal({ visible, onClose }: Props) {
     return upgrades.reduce((sum: number, u: any) => sum + u.value, 0) / upgrades.length
   }, [upgrades])
 
+  // Calculate average My Team rating
+  const myTeamRating = useMemo(() => {
+    if (eligibleDrivers.length === 0) return 0
+    const totalEffective = eligibleDrivers.reduce((sum: number, d: any) => {
+      return sum + (d.rating + carRating) / 2
+    }, 0)
+    return totalEffective / eligibleDrivers.length
+  }, [eligibleDrivers, carRating])
+
   // Get competitor mean
   const competitorMean = getCompetitorMean()
 
@@ -72,7 +91,6 @@ export function HostRaceModal({ visible, onClose }: Props) {
     setSelectedTrackId(null)
     setFieldSize(Math.max(10, eligibleDrivers.length))
     setLaps(3)
-    setSeedInput('')
     setError('')
   }
 
@@ -126,12 +144,9 @@ export function HostRaceModal({ visible, onClose }: Props) {
       return
     }
 
-    // Generate seed (use input or generate random)
-    const seed = seedInput.trim() || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
     // Create race
     const result = createRace({
-      seed,
+      seed: raceSeed,
       trackId: selectedTrackId,
       trackLoop,
       trackWidth: grid.size,
@@ -180,16 +195,12 @@ export function HostRaceModal({ visible, onClose }: Props) {
             <Text style={styles.sectionTitle}>Race Information</Text>
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>My Team Drivers:</Text>
-                <Text style={styles.infoValue}>{eligibleDrivers.length}</Text>
+                <Text style={styles.infoLabel}>My Team Rating:</Text>
+                <Text style={styles.infoValue}>{myTeamRating.toFixed(1)}★</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Competitor Rating:</Text>
                 <Text style={styles.infoValue}>{competitorMean.toFixed(1)}★</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Your Car Rating:</Text>
-                <Text style={styles.infoValue}>{carRating.toFixed(1)}</Text>
               </View>
             </View>
           </View>
@@ -229,16 +240,18 @@ export function HostRaceModal({ visible, onClose }: Props) {
             <View style={styles.fieldSizeRow}>
               <Pressable
                 onPress={() => setFieldSize(Math.max(10, fieldSize - 1))}
-                style={styles.fieldSizeButton}
+                disabled={fieldSize === 10}
+                style={[styles.fieldSizeButton, fieldSize === 10 && styles.fieldSizeButtonDisabled]}
               >
-                <Ionicons name="remove" size={24} color="#fff" />
+                <Ionicons name="remove" size={24} color={fieldSize === 10 ? '#666' : '#fff'} />
               </Pressable>
               <Text style={styles.fieldSizeText}>{fieldSize}</Text>
               <Pressable
                 onPress={() => setFieldSize(Math.min(20, fieldSize + 1))}
-                style={styles.fieldSizeButton}
+                disabled={fieldSize === 20}
+                style={[styles.fieldSizeButton, fieldSize === 20 && styles.fieldSizeButtonDisabled]}
               >
-                <Ionicons name="add" size={24} color="#fff" />
+                <Ionicons name="add" size={24} color={fieldSize === 20 ? '#666' : '#fff'} />
               </Pressable>
             </View>
             <Text style={styles.fieldSizeHint}>
@@ -251,17 +264,19 @@ export function HostRaceModal({ visible, onClose }: Props) {
             <Text style={styles.sectionTitle}>Number of Laps</Text>
             <View style={styles.fieldSizeRow}>
               <Pressable
-                onPress={() => setLaps(Math.max(1, laps - 1))}
-                style={styles.fieldSizeButton}
+                onPress={() => setLaps(Math.max(3, laps - 1))}
+                disabled={laps === 3}
+                style={[styles.fieldSizeButton, laps === 3 && styles.fieldSizeButtonDisabled]}
               >
-                <Ionicons name="remove" size={24} color="#fff" />
+                <Ionicons name="remove" size={24} color={laps === 3 ? '#666' : '#fff'} />
               </Pressable>
               <Text style={styles.fieldSizeText}>{laps}</Text>
               <Pressable
                 onPress={() => setLaps(Math.min(10, laps + 1))}
-                style={styles.fieldSizeButton}
+                disabled={laps === 10}
+                style={[styles.fieldSizeButton, laps === 10 && styles.fieldSizeButtonDisabled]}
               >
-                <Ionicons name="add" size={24} color="#fff" />
+                <Ionicons name="add" size={24} color={laps === 10 ? '#666' : '#fff'} />
               </Pressable>
             </View>
             <Text style={styles.fieldSizeHint}>
@@ -269,19 +284,18 @@ export function HostRaceModal({ visible, onClose }: Props) {
             </Text>
           </View>
 
-          {/* Seed (Optional) */}
+          {/* Race Seed */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Race Seed (Optional)</Text>
+            <Text style={styles.sectionTitle}>Race Seed</Text>
             <Text style={styles.sectionSubtext}>
-              Enter a seed for deterministic races (share with others for same results)
+              Unique race identifier for deterministic results (tap to copy)
             </Text>
-            <TextInput
-              style={styles.input}
-              value={seedInput}
-              onChangeText={setSeedInput}
-              placeholder="Leave empty for random seed"
-              placeholderTextColor="rgba(255,255,255,0.4)"
-            />
+            <Pressable onPress={handleCopySeed} style={styles.seedContainer}>
+              <Text style={styles.seedText} numberOfLines={1}>
+                {raceSeed}
+              </Text>
+              <Ionicons name="copy-outline" size={20} color="#4CAF50" />
+            </Pressable>
           </View>
 
           {/* Error */}
@@ -437,6 +451,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
+  fieldSizeButtonDisabled: {
+    backgroundColor: '#1a1a1a',
+    opacity: 0.5,
+  },
   fieldSizeText: {
     fontSize: 32,
     fontWeight: '900',
@@ -457,6 +475,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
+  },
+  seedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1a1f27',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.4)',
+  },
+  seedText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   errorBox: {
     flexDirection: 'row',

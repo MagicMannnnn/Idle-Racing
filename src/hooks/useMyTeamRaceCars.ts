@@ -397,8 +397,8 @@ export function useMyTeamRaceCars({
       packWindowFrac: 0.16,
       packJitter: 0.0,
 
-      // Hosted race laps
-      maxLap: race?.config?.laps ?? 3,
+      // Hosted race laps (finish at start of next lap)
+      maxLap: (race?.config?.laps ?? 3) + 1,
 
       startWaitTime: 1.0,
       maxOvertakeTime: 12.0,
