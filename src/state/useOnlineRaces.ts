@@ -153,16 +153,10 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
 
       // Convert online race to HostedRace format and store in useMyTeamRaces
       if (config && config.drivers && config.drivers.length > 0) {
-        // Look up track by name
-        const tracksState = useTracks.getState()
-        const track = tracksState.tracks.find((t: any) => t.name === config.track)
-        if (!track) {
-          console.error('[Online Races] Track not found:', config.track)
-          return
-        }
-        // Use grid from server if present, else local
         let gridSize: number | undefined
         let gridCells: string[] | undefined
+        let trackId: string | undefined
+        // Use grid from server if present
         if (
           config.grid &&
           Array.isArray(config.grid.cells) &&
@@ -170,17 +164,25 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
         ) {
           gridSize = config.grid.size
           gridCells = config.grid.cells
-        } else {
-          const trackMapsState = useTrackMaps.getState()
-          trackMapsState.ensure(track.id)
-          const localGrid = trackMapsState.get(track.id)
-          if (localGrid) {
-            gridSize = localGrid.size
-            gridCells = localGrid.cells
+          trackId = `online_${config.raceID}`
+        }
+        // Only fallback to local track if grid is missing
+        if ((!gridSize || !gridCells || !trackId) && config.track) {
+          const tracksState = useTracks.getState()
+          const track = tracksState.tracks.find((t: any) => t.name === config.track)
+          if (track) {
+            const trackMapsState = useTrackMaps.getState()
+            trackMapsState.ensure(track.id)
+            const localGrid = trackMapsState.get(track.id)
+            if (localGrid) {
+              gridSize = localGrid.size
+              gridCells = localGrid.cells
+              trackId = track.id
+            }
           }
         }
-        if (!gridSize || !gridCells) {
-          console.error('[Online Races] Track grid not available:', track.id)
+        if (!gridSize || !gridCells || !trackId) {
+          console.error('[Online Races] Track grid not available')
           return
         }
         // Extract track loop
@@ -191,7 +193,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
           }
         }
         if (trackLoop.length === 0) {
-          console.error('[Online Races] Track has no racing line:', track.id)
+          console.error('[Online Races] Track has no racing line:', trackId)
           return
         }
         const raceDrivers: RaceDriverSnapshot[] = config.drivers.map((driver, index) => ({
@@ -208,7 +210,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
           config: {
             id: config.raceID,
             seed: config.raceID, // Use race ID as seed for deterministic simulation
-            trackId: track.id,
+            trackId,
             trackLoop,
             trackWidth: gridSize,
             driverIds: [], // Not used for online races

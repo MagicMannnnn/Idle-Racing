@@ -276,6 +276,18 @@ function createRaceDrivers(race: HostedRace, rand: () => number): RaceDriverSnap
   return drivers
 }
 
+// --- ensure race simulation continues when tab is inactive ---
+// Patch requestAnimationFrame to use setTimeout if document.hidden
+if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+  const origRAF = window.requestAnimationFrame
+  window.requestAnimationFrame = function (cb) {
+    if (typeof document !== 'undefined' && document.hidden) {
+      return window.setTimeout(() => cb(performance.now()), 16)
+    }
+    return origRAF(cb)
+  }
+}
+
 // ---------- main hook ----------
 
 export function useMyTeamRaceCars({
