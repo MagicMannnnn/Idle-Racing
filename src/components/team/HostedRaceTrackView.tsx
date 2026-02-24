@@ -337,6 +337,11 @@ export function HostedRaceTrackView({
     onFinished,
   })
 
+  // Create driver names and numbers arrays for TrackLeaderboard
+  // These map car.id (1-indexed) to driver info: driverNames[car.id - 1] = driver name
+  const driverNames = useMemo(() => _raceDrivers.map((d) => d.driverName), [_raceDrivers])
+  const driverNumbers = useMemo(() => _raceDrivers.map((d) => d.driverNumber), [_raceDrivers])
+
   const needsNewRaceRef = useRef(false)
 
   // Timer state - 60 second race
@@ -733,6 +738,8 @@ export function HostedRaceTrackView({
                 cars={displayCars}
                 height={leaderboardHeight}
                 setLeaderId={setLeaderId}
+                driverNames={driverNames}
+                driverNumbers={driverNumbers}
               />
             </View>
           </View>
@@ -794,7 +801,13 @@ export function HostedRaceTrackView({
             </View>
 
             <View style={{ width: isLandscape ? 350 : wrapW, alignSelf: 'center' }}>
-              <TrackLeaderboard cars={displayCars} height={470} setLeaderId={setLeaderId} />
+              <TrackLeaderboard
+                cars={displayCars}
+                height={470}
+                setLeaderId={setLeaderId}
+                driverNames={driverNames}
+                driverNumbers={driverNumbers}
+              />
             </View>
           </View>
         </ScrollView>

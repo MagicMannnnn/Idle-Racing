@@ -15,12 +15,25 @@ type Props = {
   height?: number
   sampleMs?: number
   setLeaderId?: (id: number | null) => void
+  driverNames?: string[]
+  driverNumbers?: number[]
 }
 
-export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
+export function TrackLeaderboard({
+  cars,
+  height = 180,
+  sampleMs = 250,
+  setLeaderId,
+  driverNames: customDriverNames,
+  driverNumbers: customDriverNumbers,
+}: Props) {
   const [rows, setRows] = useState<Row[]>([])
-  const carNames = useTrackMaps((s: any) => s.carNames || [])
-  const carNumbers = useTrackMaps((s: any) => s.carNumbers || [])
+  const storeCarNames = useTrackMaps((s: any) => s.carNames || [])
+  const storeCarNumbers = useTrackMaps((s: any) => s.carNumbers || [])
+
+  // Use custom driver names/numbers if provided, otherwise fall back to store
+  const carNames = customDriverNames ?? storeCarNames
+  const carNumbers = customDriverNumbers ?? storeCarNumbers
 
   useEffect(() => {
     let alive = true

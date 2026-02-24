@@ -5,7 +5,7 @@ import { useMyTeamRaces } from '@state/useMyTeamRaces'
 import { useTracks } from '@state/useTracks'
 import { router } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 function HostedRaceView() {
@@ -82,7 +82,11 @@ function HostedRaceView() {
             <Text style={styles.resultsTitle}>Final Results</Text>
           </View>
 
-          <View style={styles.resultsList}>
+          <ScrollView
+            style={styles.resultsList}
+            contentContainerStyle={{ gap: 8 }}
+            showsVerticalScrollIndicator={false}
+          >
             {results &&
               results.map((result) => (
                 <View
@@ -134,7 +138,7 @@ function HostedRaceView() {
                   )}
                 </View>
               ))}
-          </View>
+          </ScrollView>
 
           {!prestigeAwarded && (
             <Pressable
