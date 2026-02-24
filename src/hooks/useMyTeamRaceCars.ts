@@ -367,6 +367,15 @@ export function useMyTeamRaceCars({
   )
 
   const TUNE = useMemo(() => {
+    const maxLap = (race?.config?.laps ?? 3) + 1
+    console.log(
+      '[useMyTeamRaceCars] TUNE initialized - race laps:',
+      race?.config?.laps,
+      'maxLap:',
+      maxLap,
+      'carCount:',
+      carCount,
+    )
     return {
       baseSpeed: 3.2,
       // IMPORTANT: no random variance here for hosted races; per-driver variation is fixed from seed (driver.driverVariation).
@@ -414,7 +423,7 @@ export function useMyTeamRaceCars({
       packJitter: 0.0,
 
       // Hosted race laps (finish at start of next lap)
-      maxLap: (race?.config?.laps ?? 3) + 1,
+      maxLap,
 
       startWaitTime: 1.0,
       maxOvertakeTime: 12.0,
@@ -427,7 +436,7 @@ export function useMyTeamRaceCars({
 
       publishHz: 30,
     }
-  }, [race?.config?.laps])
+  }, [race?.config?.laps, carCount])
 
   const computeDir = useCallback(
     (from: number, to: number): Dir => {
@@ -1053,6 +1062,10 @@ export function useMyTeamRaceCars({
           finishedRef.current[i] = true
           finishCountRef.current++
           finishOrderRef.current[i] = finishCountRef.current
+          const driverName = drivers[i]?.driverName || `Car ${i + 1}`
+          console.log(
+            `[useMyTeamRaceCars] ${driverName} finished! Position: ${finishCountRef.current}/${carCount}`,
+          )
           // Mark car as finished (will be hidden from track)
           const carAnim = cars[i]
           if (carAnim) {
@@ -1383,10 +1396,14 @@ export function useMyTeamRaceCars({
       }
 
       // finish condition: all cars have completed their laps
+      // Ensure we have the correct number of cars and that ALL have finished
       const allFinished =
-        finishedRef.current.length > 0 && finishedRef.current.every((finished) => finished)
+        finishedRef.current.length === carCount &&
+        finishedRef.current.length > 0 &&
+        finishedRef.current.every((finished) => finished)
 
       if (allFinished && !isFinished) {
+        console.log('[useMyTeamRaceCars] ALL CARS FINISHED - triggering race end')
         setIsFinished(true)
 
         // Build results using finish order
@@ -1417,6 +1434,12 @@ export function useMyTeamRaceCars({
             if (prestige > 0) r.prestigeAwarded = prestige
           }
         })
+
+        const isOnline = race.isOnline ?? false
+        console.log(
+          `[useMyTeamRaceCars] Race finished! Type: ${isOnline ? 'ONLINE' : 'LOCAL'}, Results:`,
+          results.length,
+        )
 
         finishRace(results)
         onFinished?.(results)

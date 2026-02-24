@@ -126,7 +126,15 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
     // Race events
     newSocket.on('race:state', (state: OnlineRaceState) => {
       console.log('[Online Races] Race state update:', state.raceID, 'Started:', state.started)
-      set({ currentRace: state })
+      // Don't update currentRace if we have a race actively running
+      // The local simulation needs to complete independently
+      const myTeamRacesState = useMyTeamRaces.getState()
+      const activeRace = myTeamRacesState.getActiveRace()
+      if (!activeRace || activeRace.state !== 'running') {
+        set({ currentRace: state })
+      } else {
+        console.log('[Online Races] Ignoring race:state update - race still running locally')
+      }
     })
 
     newSocket.on('race:started', (payload) => {
@@ -213,6 +221,7 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
           startedAt: payload.startedAt,
           drivers: raceDrivers,
           prestigeAwarded: false,
+          isOnline: true, // Mark as online race - runs independently, no auto-cancel
         }
 
         console.log('[Online Races] Created HostedRace:', hostedRace.config.id)
@@ -233,7 +242,15 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
 
     newSocket.on('race:closed', (payload) => {
       console.log('[Online Races] Race closed:', payload.raceID)
-      set({ currentRace: null, isHost: false })
+      // Don't clear currentRace if we have an active race running
+      // Each client needs to finish their simulation independently
+      const myTeamRacesState = useMyTeamRaces.getState()
+      const activeRace = myTeamRacesState.getActiveRace()
+      if (!activeRace || activeRace.state !== 'running') {
+        set({ currentRace: null, isHost: false })
+      } else {
+        console.log('[Online Races] Ignoring race:closed - race still running locally')
+      }
     })
 
     newSocket.on('race:error', (error) => {

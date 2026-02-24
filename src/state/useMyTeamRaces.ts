@@ -62,6 +62,7 @@ export type HostedRace = {
   drivers: RaceDriverSnapshot[] // all drivers in the race (My Team + AI)
   results?: HostedRaceResultRow[] // final results, set when state becomes 'finished'
   prestigeAwarded: boolean // true if prestige has been awarded for this race
+  isOnline?: boolean // true if this is an online multiplayer race (runs independently, no auto-cancel)
 }
 
 /**
@@ -434,16 +435,24 @@ function createActions(
       const race = getState().activeRace
       if (!race) return null
 
-      // Auto-cleanup: if race is running without startedAt or for more than 70 seconds, cancel it
-      if (race.state === 'running') {
+      // Auto-cleanup: if race is running without startedAt or for more than timeout, cancel it
+      // Skip auto-cleanup for online races - they run independently on each client
+      if (race.state === 'running' && !race.isOnline) {
         if (!race.startedAt) {
           // Race is running but has no start time (invalid state)
           dispatch({ type: 'CANCEL_RACE' })
           return null
         }
         const elapsed = (Date.now() - race.startedAt) / 1000
-        if (elapsed > 70) {
+        // Longer timeout for races (was 70s, now 120s)
+        if (elapsed > 120) {
           // Race expired, cancel it
+          console.log(
+            '[MyTeamRaces] Auto-canceling expired race:',
+            race.config.id,
+            'elapsed:',
+            elapsed,
+          )
           dispatch({ type: 'CANCEL_RACE' })
           return null
         }
