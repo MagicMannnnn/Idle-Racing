@@ -13,6 +13,7 @@ export type HostedRaceConfig = {
   driverIds: string[] // My Team driver IDs participating
   competitorMean: number // mean rating of AI competitors (0.5-5.0)
   fieldSize: number // total number of racers (My Team + AI), max 10
+  laps: number // number of laps to complete, default 5
   createdAt: number // timestamp when race was created
 }
 

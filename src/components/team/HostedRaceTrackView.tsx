@@ -344,29 +344,24 @@ export function HostedRaceTrackView({
 
   const needsNewRaceRef = useRef(false)
 
-  // Timer state - 60 second race
-  const [timeRemaining, setTimeRemaining] = useState(60)
+  // Track lap progress - sample max lap from all cars
+  const [maxLapCompleted, setMaxLapCompleted] = useState(0)
+  const maxLaps = activeRace?.config?.laps ?? 5
 
-  // Update timer every 100ms
+  // Sample lap progress every 250ms
   useEffect(() => {
-    if (!activeRace || activeRace.state !== 'running' || !activeRace.startedAt) {
-      setTimeRemaining(60)
+    if (!activeRace || activeRace.state !== 'running' || cars.length === 0) {
+      setMaxLapCompleted(0)
       return
     }
 
     const interval = setInterval(() => {
-      const elapsed = (Date.now() - activeRace.startedAt!) / 1000
-      const remaining = Math.max(0, 60 - elapsed)
-      setTimeRemaining(remaining)
-
-      // Auto-finish after 60 seconds
-      if (remaining <= 0 && !isFinished) {
-        stop()
-      }
-    }, 100)
+      const maxLap = Math.max(0, ...cars.map((c) => Math.floor(c.laps.value || 0)))
+      setMaxLapCompleted(maxLap)
+    }, 250)
 
     return () => clearInterval(interval)
-  }, [activeRace, activeRace?.startedAt, activeRace?.state, isFinished, stop])
+  }, [activeRace, activeRace?.state, cars])
 
   // Determine if we should show cars and run simulation
   useEffect(() => {
@@ -636,13 +631,10 @@ export function HostedRaceTrackView({
   // If no drivers, show last race results in leaderboard
   const displayCars = driverIds.length > 0 ? cars : []
 
-  // Format timer display
-  const timerDisplay = useMemo(() => {
-    const seconds = Math.ceil(timeRemaining)
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }, [timeRemaining])
+  // Format lap display
+  const lapDisplay = useMemo(() => {
+    return `Lap ${maxLapCompleted}/${maxLaps}`
+  }, [maxLapCompleted, maxLaps])
 
   // Measure render time
   useEffect(() => {
@@ -652,7 +644,7 @@ export function HostedRaceTrackView({
 
   return (
     <SafeAreaView style={styles.safe} edges={isWeb ? ['top', 'left', 'right', 'bottom'] : []}>
-      {/* Header with timer */}
+      {/* Header with lap counter */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
@@ -661,14 +653,8 @@ export function HostedRaceTrackView({
           <Text style={styles.headerTitle}>{isFinished ? 'Race Complete' : 'Racing...'}</Text>
         </View>
         <View style={styles.timerBox}>
-          <Ionicons
-            name="time-outline"
-            size={20}
-            color={timeRemaining < 10 ? '#FF5252' : '#FFFFFF'}
-          />
-          <Text style={[styles.timerText, timeRemaining < 10 && styles.timerTextWarning]}>
-            {timerDisplay}
-          </Text>
+          <Ionicons name="flag" size={20} color="#FFFFFF" />
+          <Text style={styles.timerText}>{lapDisplay}</Text>
         </View>
       </View>
 
@@ -853,9 +839,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
-  },
-  timerTextWarning: {
-    color: '#FF5252',
   },
 
   scrollContent: {

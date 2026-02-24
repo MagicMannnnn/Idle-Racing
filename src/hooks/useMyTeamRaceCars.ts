@@ -398,7 +398,7 @@ export function useMyTeamRaceCars({
       packJitter: 0.0,
 
       // Hosted race laps
-      maxLap: race?.config?.laps ?? 3,
+      maxLap: race?.config?.laps ?? 5,
 
       startWaitTime: 1.0,
       maxOvertakeTime: 12.0,

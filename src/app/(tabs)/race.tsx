@@ -271,6 +271,7 @@ const styles = StyleSheet.create({
   resultsCard: {
     width: '100%',
     maxWidth: 600,
+    maxHeight: '85%', // Ensure card doesn't overflow screen
     backgroundColor: '#1a1f27',
     borderRadius: 16,
     padding: 16,
@@ -288,7 +289,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFFFFF',
   },
-  resultsList: { gap: 8 },
+  resultsList: {
+    flex: 1, // Allow ScrollView to take available space
+    gap: 8,
+  },
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',

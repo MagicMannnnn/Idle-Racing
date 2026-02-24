@@ -33,6 +33,7 @@ export function HostRaceModal({ visible, onClose }: Props) {
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set())
   const [fieldSize, setFieldSize] = useState(10)
+  const [laps, setLaps] = useState(3)
   const [seedInput, setSeedInput] = useState('')
   const [error, setError] = useState('')
 
@@ -61,6 +62,7 @@ export function HostRaceModal({ visible, onClose }: Props) {
     setSelectedTrackId(null)
     setSelectedDriverIds(new Set())
     setFieldSize(10)
+    setLaps(3)
     setSeedInput('')
     setError('')
   }
@@ -137,6 +139,7 @@ export function HostRaceModal({ visible, onClose }: Props) {
       driverIds: Array.from(selectedDriverIds),
       competitorMean,
       fieldSize,
+      laps,
     })
 
     if (!result.ok) {
@@ -278,6 +281,29 @@ export function HostRaceModal({ visible, onClose }: Props) {
             </View>
             <Text style={styles.fieldSizeHint}>
               {selectedDriverIds.size} My Team + {fieldSize - selectedDriverIds.size} AI
+            </Text>
+          </View>
+
+          {/* Laps Configuration */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Number of Laps</Text>
+            <View style={styles.fieldSizeRow}>
+              <Pressable
+                onPress={() => setLaps(Math.max(1, laps - 1))}
+                style={styles.fieldSizeButton}
+              >
+                <Ionicons name="remove" size={24} color="#fff" />
+              </Pressable>
+              <Text style={styles.fieldSizeText}>{laps}</Text>
+              <Pressable
+                onPress={() => setLaps(Math.min(10, laps + 1))}
+                style={styles.fieldSizeButton}
+              >
+                <Ionicons name="add" size={24} color="#fff" />
+              </Pressable>
+            </View>
+            <Text style={styles.fieldSizeHint}>
+              Race completes when leader finishes {laps} laps
             </Text>
           </View>
 
