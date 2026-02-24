@@ -628,7 +628,11 @@ export function HostedRaceTrackView({
     return map
   }, [cells, mapSize, trackKerbsByIndex])
 
-  // If no drivers, show last race results in leaderboard
+  // Filter out finished cars from track display, but keep them for leaderboard
+  const displayCarsOnTrack = useMemo(
+    () => (driverIds.length > 0 ? cars.filter((c) => !c.finished.value) : []),
+    [cars, driverIds.length],
+  )
   const displayCars = driverIds.length > 0 ? cars : []
 
   // Format lap display
@@ -710,7 +714,7 @@ export function HostedRaceTrackView({
 
                 {showCarsVisual ? (
                   <CellCars
-                    cars={displayCars}
+                    cars={displayCarsOnTrack}
                     carW={cellPx / 6}
                     carH={cellPx / 4}
                     leaderId={leaderId}
@@ -777,7 +781,7 @@ export function HostedRaceTrackView({
 
                 {showCarsVisual ? (
                   <CellCars
-                    cars={displayCars}
+                    cars={displayCarsOnTrack}
                     carW={cellPx / 6}
                     carH={cellPx / 4}
                     leaderId={leaderId}

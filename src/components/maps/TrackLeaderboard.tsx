@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons'
 import type { CarAnim } from '@hooks/useTrackCars'
 import { useTrackMaps } from '@state/useTrackMaps'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -8,6 +9,7 @@ type Row = {
   laps: number
   progress: number
   colorHex: string
+  finished: boolean
 }
 
 type Props = {
@@ -45,6 +47,7 @@ export function TrackLeaderboard({
         laps: Math.max(0, Math.floor(c.laps.value || 0)),
         progress: c.progress.value || 0,
         colorHex: c.colorHex,
+        finished: c.finished?.value ?? false,
       }))
 
       next.sort((a, b) => b.progress - a.progress)
@@ -130,6 +133,9 @@ export function TrackLeaderboard({
                 <View style={styles.nameWrap}>
                   <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
                   <Text style={[styles.cell, styles.name]}>{name}</Text>
+                  {r.finished && (
+                    <Ionicons name="flag" size={14} color="#4CAF50" style={{ marginLeft: 6 }} />
+                  )}
                 </View>
 
                 <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>

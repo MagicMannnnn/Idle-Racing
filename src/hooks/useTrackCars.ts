@@ -11,6 +11,7 @@ export type CarAnim = {
   rotDeg: SharedValue<number>
   progress: SharedValue<number>
   laps: SharedValue<number>
+  finished?: SharedValue<boolean>
   colorHex: string
 }
 

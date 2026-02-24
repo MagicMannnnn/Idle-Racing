@@ -14,6 +14,7 @@ export type CarAnim = {
   rotDeg: SharedValue<number>
   progress: SharedValue<number>
   laps: SharedValue<number>
+  finished: SharedValue<boolean>
   colorHex: string
 }
 
@@ -310,6 +311,9 @@ export function useMyTeamRaceCars({
   const beingOvertakenRef = useRef<number[]>([])
 
   const lapsRef = useRef<number[]>([])
+  const finishedRef = useRef<boolean[]>([])
+  const finishOrderRef = useRef<number[]>([])
+  const finishCountRef = useRef(0)
 
   const runningRef = useRef(false)
   const rafRef = useRef<number | null>(null)
@@ -589,6 +593,7 @@ export function useMyTeamRaceCars({
         rotDeg: makeMutable(0),
         progress: makeMutable(0),
         laps: makeMutable(0),
+        finished: makeMutable(false),
         colorHex: colors[i % colors.length],
       })
     }
@@ -614,6 +619,9 @@ export function useMyTeamRaceCars({
     beingOvertakenRef.current = new Array(carCount).fill(0)
 
     lapsRef.current = new Array(carCount).fill(0)
+    finishedRef.current = new Array(carCount).fill(false)
+    finishOrderRef.current = new Array(carCount).fill(0)
+    finishCountRef.current = 0
 
     orderIdxRef.current = new Array(carCount)
     for (let i = 0; i < carCount; i++) orderIdxRef.current[i] = i
@@ -926,6 +934,11 @@ export function useMyTeamRaceCars({
       const raceNow = getRaceNowEpochMs(ts)
 
       for (let i = 0; i < sArr.length; i++) {
+        // Skip movement for cars that have finished
+        if (finishedRef.current[i]) {
+          continue
+        }
+
         const s = ((sArr[i] % len) + len) % len
         const seg = Math.floor(s)
         const frac = s - seg
@@ -1008,6 +1021,21 @@ export function useMyTeamRaceCars({
               lapsRef.current[i] = Math.min(TUNE.maxLap, (lapsRef.current[i] ?? 0) + 1)
             }
           }
+        }
+
+        // Check if car just finished
+        const currentLaps = lapsRef.current[i] ?? 0
+        if (currentLaps >= TUNE.maxLap && !finishedRef.current[i]) {
+          finishedRef.current[i] = true
+          finishCountRef.current++
+          finishOrderRef.current[i] = finishCountRef.current
+          // Mark car as finished (will be hidden from track)
+          const carAnim = cars[i]
+          if (carAnim) {
+            carAnim.finished.value = true
+          }
+          // Stop the car at the finish line
+          vArr[i] = 0
         }
 
         ns %= len
@@ -1330,18 +1358,14 @@ export function useMyTeamRaceCars({
         }
       }
 
-      // finish condition: any car hits maxLap (same pattern as your broken version, but based on lapsRef like useTrackCars)
-      let raceFinished = false
-      for (let i = 0; i < ids.length; i++) {
-        if ((lapsRef.current[i] ?? 0) >= TUNE.maxLap) {
-          raceFinished = true
-          break
-        }
-      }
+      // finish condition: all cars have completed their laps
+      const allFinished =
+        finishedRef.current.length > 0 && finishedRef.current.every((finished) => finished)
 
-      if (raceFinished && !isFinished) {
+      if (allFinished && !isFinished) {
         setIsFinished(true)
 
+        // Build results using finish order
         const results: HostedRaceResultRow[] = drivers.map((driver, i) => {
           const lp = lapsRef.current[i] ?? 0
           const prog = lp * len + (((sArr[i] % len) + len) % len)
@@ -1349,20 +1373,21 @@ export function useMyTeamRaceCars({
             driverId: driver.driverId,
             driverName: driver.driverName,
             driverNumber: driver.driverNumber,
-            position: 0,
+            position: finishOrderRef.current[i] || 0,
             laps: lp,
             finalProgress: prog,
             isMyTeam: driver.isMyTeam,
           }
         })
 
-        results.sort((a, b) => b.finalProgress - a.finalProgress)
+        // Sort by finish order (position already assigned)
+        results.sort((a, b) => a.position - b.position)
 
         const competitorMean = race.config.competitorMean ?? 2.0
         const fieldSize = race.config.fieldSize ?? carCount
 
-        results.forEach((r, idx) => {
-          r.position = idx + 1
+        // Calculate prestige for My Team drivers
+        results.forEach((r) => {
           if (r.isMyTeam) {
             const prestige = calculatePrestigeAward(r.position, competitorMean, fieldSize)
             if (prestige > 0) r.prestigeAwarded = prestige
