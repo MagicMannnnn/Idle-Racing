@@ -827,8 +827,8 @@ export function HostedRaceTrackView({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  scroll: { flex: 1 },
+  safe: { flex: 1, backgroundColor: '#f7f7fa' },
+  scroll: { flex: 1, backgroundColor: '#f7f7fa' },
 
   header: {
     flexDirection: 'row',
@@ -836,9 +836,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1a1f27',
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
   headerCenter: {
     flex: 1,
@@ -847,7 +847,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: '#222',
   },
   timerBox: {
     flexDirection: 'row',
