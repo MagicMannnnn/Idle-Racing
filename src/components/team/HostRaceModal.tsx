@@ -196,11 +196,11 @@ export function HostRaceModal({ visible, onClose }: Props) {
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>My Team Rating:</Text>
-                <Text style={styles.infoValue}>{myTeamRating.toFixed(1)}★</Text>
+                <Text style={styles.infoValue}>{myTeamRating.toFixed(2)}★</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Competitor Rating:</Text>
-                <Text style={styles.infoValue}>{competitorMean.toFixed(1)}★</Text>
+                <Text style={styles.infoValue}>{competitorMean.toFixed(2)}★</Text>
               </View>
             </View>
           </View>

@@ -152,28 +152,27 @@ function calculatePrestigeAward(
 
 /**
  * Calculate adjustment to competitor mean based on My Team results
- * If My Team does well -> increase competitor difficulty
- * If My Team does poorly -> decrease competitor difficulty
+ * If winning: increase by 0.1-0.2
+ * If not winning: decrease based on position (worse = more decrease, max -0.05)
  */
-function calculateCompetitorAdjustment(results: HostedRaceResultRow[], fieldSize: number): number {
+function calculateCompetitorAdjustment(results: HostedRaceResultRow[], _fieldSize: number): number {
   const myTeamResults = results.filter((r) => r.isMyTeam)
   if (myTeamResults.length === 0) return 0
 
-  // Calculate average position of My Team drivers
-  const avgPosition = myTeamResults.reduce((sum, r) => sum + r.position, 0) / myTeamResults.length
+  // Find best finishing position among My Team drivers
+  const bestPosition = Math.min(...myTeamResults.map((r) => r.position))
 
-  // Expected position is middle of the field
-  const expectedPosition = (fieldSize + 1) / 2
+  // If My Team won (position 1): increase difficulty
+  if (bestPosition === 1) {
+    // Increase by 0.1-0.2 (using 0.15 as middle ground)
+    return 0.15
+  }
 
-  // Difference: negative means better than expected, positive means worse
-  const diff = avgPosition - expectedPosition
-
-  // Convert to adjustment: -0.1 to +0.1 per race
-  // If all My Team drivers finish in top half, adjust up
-  // If all finish in bottom half, adjust down
-  const adjustment = -diff * 0.02 // Scale factor
-
-  return Math.max(-0.1, Math.min(0.1, adjustment))
+  // If not winning: decrease based on finishing position
+  // Worse position = bigger decrease (max -0.05)
+  // Formula: -min(0.05, (position - 1) * 0.005)
+  const decrease = Math.min(0.05, (bestPosition - 1) * 0.005)
+  return -decrease
 }
 
 const STORAGE_KEY = 'idle.myteamraces.v1'
