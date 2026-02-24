@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons'
 import type { CarAnim } from '@hooks/useTrackCars'
 import { useTrackMaps } from '@state/useTrackMaps'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -8,6 +9,7 @@ type Row = {
   laps: number
   progress: number
   colorHex: string
+  finished: boolean
 }
 
 type Props = {
@@ -15,12 +17,25 @@ type Props = {
   height?: number
   sampleMs?: number
   setLeaderId?: (id: number | null) => void
+  driverNames?: string[]
+  driverNumbers?: number[]
 }
 
-export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeaderId }: Props) {
+export function TrackLeaderboard({
+  cars,
+  height = 180,
+  sampleMs = 250,
+  setLeaderId,
+  driverNames: customDriverNames,
+  driverNumbers: customDriverNumbers,
+}: Props) {
   const [rows, setRows] = useState<Row[]>([])
-  const carNames = useTrackMaps((s: any) => s.carNames || [])
-  const carNumbers = useTrackMaps((s: any) => s.carNumbers || [])
+  const storeCarNames = useTrackMaps((s: any) => s.carNames || [])
+  const storeCarNumbers = useTrackMaps((s: any) => s.carNumbers || [])
+
+  // Use custom driver names/numbers if provided, otherwise fall back to store
+  const carNames = customDriverNames ?? storeCarNames
+  const carNumbers = customDriverNumbers ?? storeCarNumbers
 
   useEffect(() => {
     let alive = true
@@ -32,6 +47,7 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
         laps: Math.max(0, Math.floor(c.laps.value || 0)),
         progress: c.progress.value || 0,
         colorHex: c.colorHex,
+        finished: c.finished?.value ?? false,
       }))
 
       next.sort((a, b) => b.progress - a.progress)
@@ -117,6 +133,9 @@ export function TrackLeaderboard({ cars, height = 180, sampleMs = 250, setLeader
                 <View style={styles.nameWrap}>
                   <View style={[styles.swatch, { backgroundColor: r.colorHex }]} />
                   <Text style={[styles.cell, styles.name]}>{name}</Text>
+                  {r.finished && (
+                    <Ionicons name="flag" size={14} color="#4CAF50" style={{ marginLeft: 6 }} />
+                  )}
                 </View>
 
                 <Text style={[styles.cell, styles.laps]}>{r.laps}</Text>

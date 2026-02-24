@@ -1,4 +1,7 @@
-import { useSettings } from '@state/useSettings'
+import type { HostedRace, HostedRaceResultRow, RaceDriverSnapshot } from '@state/useMyTeamRaces'
+import { calculatePrestigeAward, useMyTeamRaces } from '@state/useMyTeamRaces'
+import { useTeam } from '@state/useTeam'
+import { mulberry32, seedFromString } from '@utils/rng'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { makeMutable, type SharedValue } from 'react-native-reanimated'
 
@@ -11,14 +14,14 @@ export type CarAnim = {
   rotDeg: SharedValue<number>
   progress: SharedValue<number>
   laps: SharedValue<number>
-  finished?: SharedValue<boolean>
+  finished: SharedValue<boolean>
   colorHex: string
 }
 
-type UseTrackCarsOpts = {
+type UseMyTeamRaceCarsOpts = {
+  raceId: string
   loop: number[]
   width: number
-  carCount?: number
   cellPx: number
   gapPx: number
   padPx: number
@@ -26,8 +29,7 @@ type UseTrackCarsOpts = {
   carHFrac?: number
   carWPx?: number
   carHPx?: number
-  carRatings?: number[] // Optional ratings (0.1-5.0) for each car, affects speed
-  speedVariance?: number // Optional speed variance override (default: from settings)
+  onFinished?: (results: HostedRaceResultRow[]) => void
 }
 
 const dirToDeg = (d: Dir) => (d === 'N' ? 0 : d === 'E' ? 90 : d === 'S' ? 180 : 270)
@@ -101,35 +103,6 @@ const fixOrderBySwaps = (orderIdx: number[], sArr: number[]) => {
       }
     }
   }
-}
-
-function mulberry32(seed: number) {
-  return function () {
-    let t = (seed += 0x6d2b79f5)
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-function colorFromId(id: number, total = 20) {
-  const h = Math.round((360 / total) * (id % total))
-  const s = 78 + (id % 2) * 10
-  const l = 52 + (id % 3) * 6
-  return `hsl(${h}, ${s}%, ${l}%)`
-}
-
-function generateColorPalette(total: number) {
-  return Array.from({ length: total }, (_, i) => colorFromId(i, total))
-}
-
-function shuffle<T>(arr: T[], rand = Math.random): T[] {
-  const a = arr.slice()
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
 }
 
 type OvertakePhase = 0 | 1 | 2 | 3
@@ -214,10 +187,89 @@ function mtvOBB(
   return { x: bestAxisX * bestOverlap, y: bestAxisY * bestOverlap }
 }
 
-export function useTrackCars({
+// ---------- your existing driver creation helpers (kept) ----------
+
+function generateAIDrivers(
+  rand: () => number,
+  count: number,
+  competitorMean: number,
+  usedNumbers: Set<number>,
+): RaceDriverSnapshot[] {
+  const drivers: RaceDriverSnapshot[] = []
+  const stdDev = 0.3
+
+  for (let i = 0; i < count; i++) {
+    const u1 = rand()
+    const u2 = rand()
+    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    const rating = Math.max(0.5, Math.min(5.0, competitorMean + z0 * stdDev))
+
+    let driverNumber = Math.floor(rand() * 99) + 1
+    while (usedNumbers.has(driverNumber)) driverNumber = (driverNumber % 99) + 1
+    usedNumbers.add(driverNumber)
+
+    const variation = (rand() * 2 - 1) * 0.1 // fixed from seed
+
+    drivers.push({
+      driverId: `ai_${i + 1}`,
+      driverName: `AI Driver`,
+      driverNumber,
+      driverRating: rating,
+      carRating: rating,
+      effectiveRating: rating,
+      driverVariation: variation,
+      isMyTeam: false,
+    })
+  }
+
+  return drivers
+}
+
+function createRaceDrivers(race: HostedRace, rand: () => number): RaceDriverSnapshot[] {
+  const teamState = useTeam.getState()
+  const drivers: RaceDriverSnapshot[] = []
+  const usedNumbers = new Set<number>()
+
+  for (const driverId of race.config.driverIds) {
+    const driver = teamState.drivers.find((d: any) => d.id === driverId)
+    if (!driver) continue
+
+    const carRating =
+      teamState.upgrades.reduce((sum: number, u: any) => sum + u.value, 0) /
+      Math.max(1, teamState.upgrades.length)
+
+    const effectiveRating = (driver.rating + carRating) / 2
+
+    const variation = (rand() * 2 - 1) * 0.1 // fixed from seed
+
+    usedNumbers.add(driver.number)
+
+    drivers.push({
+      driverId: driver.id,
+      driverName: driver.name,
+      driverNumber: driver.number,
+      driverRating: driver.rating,
+      carRating,
+      effectiveRating,
+      driverVariation: variation,
+      contractExpiresAt: driver.contractExpiresAt,
+      isMyTeam: true,
+    })
+  }
+
+  const aiCount = race.config.fieldSize - drivers.length
+  if (aiCount > 0)
+    drivers.push(...generateAIDrivers(rand, aiCount, race.config.competitorMean, usedNumbers))
+
+  return drivers
+}
+
+// ---------- main hook ----------
+
+export function useMyTeamRaceCars({
+  raceId,
   loop,
   width,
-  carCount = 5,
   cellPx,
   gapPx,
   padPx,
@@ -225,20 +277,89 @@ export function useTrackCars({
   carHFrac = 1 / 4,
   carWPx,
   carHPx,
-  carRatings,
-  speedVariance: speedVarianceOverride,
-}: UseTrackCarsOpts) {
+  onFinished,
+}: UseMyTeamRaceCarsOpts) {
+  const getActiveRace = useMyTeamRaces((s: any) => s.getActiveRace)
+  const finishRace = useMyTeamRaces((s: any) => s.finishRace)
+
+  const race = getActiveRace()
   const len = loop.length
-  const maxCarCount = useSettings((s: any) => s.maxCarCount)
-  const safeCarCount = Math.min(carCount, len, maxCarCount)
-  const settingsVariance = useSettings((s: any) => s.speedVariance)
-  const variance =
-    (speedVarianceOverride !== undefined ? speedVarianceOverride : settingsVariance) / 100
+  const carCount = race?.config.fieldSize ?? 0
+
+  const [cars, setCars] = useState<CarAnim[]>([])
+  const [drivers, setDrivers] = useState<RaceDriverSnapshot[]>([])
+  const [isFinished, setIsFinished] = useState(false)
+
+  // --- these refs mirror useTrackCars ---
+  const idsRef = useRef<number[]>([])
+  const sRef = useRef<number[]>([])
+  const vRef = useRef<number[]>([])
+  const baseRef = useRef<number[]>([])
+  const streakRef = useRef<number[]>([])
+
+  const laneRef = useRef<number[]>([])
+  const sideRef = useRef<number[]>([])
+  const phaseRef = useRef<OvertakePhase[]>([])
+  const holdRef = useRef<number[]>([])
+  const overtakeTimeRef = useRef<number[]>([])
+
+  const posXRef = useRef<number[]>([])
+  const posYRef = useRef<number[]>([])
+  const rotRef = useRef<number[]>([])
+
+  const targetIdRef = useRef<number[][]>([])
+  const beingOvertakenRef = useRef<number[]>([])
+
+  const lapsRef = useRef<number[]>([])
+  const finishedRef = useRef<boolean[]>([])
+  const finishOrderRef = useRef<number[]>([])
+  const finishCountRef = useRef(0)
+
+  const runningRef = useRef(false)
+  const rafRef = useRef<number | null>(null)
+  const lastTsRef = useRef<number | null>(null)
+  const startAtTsRef = useRef<number | null>(null)
+
+  const orderIdxRef = useRef<number[]>([])
+  const posInOrderRef = useRef<Int32Array | null>(null)
+  const idToIndexRef = useRef<Int32Array | null>(null)
+
+  const gapAheadRef = useRef<Float32Array | null>(null)
+  const desiredRef = useRef<Float32Array | null>(null)
+
+  const targetPxRef = useRef<Float32Array | null>(null)
+  const targetPyRef = useRef<Float32Array | null>(null)
+  const rotDegArrRef = useRef<Float32Array | null>(null)
+  const rotRadArrRef = useRef<Float32Array | null>(null)
+
+  const pxRef = useRef<Float32Array | null>(null)
+  const pyRef = useRef<Float32Array | null>(null)
+
+  const publishAccumRef = useRef(0)
+  const didLayoutRef = useRef(false)
+
+  // Deterministic “race time” base. Prefer store timestamp if present; else snapshot once.
+  const raceStartEpochRef = useRef<number | null>(null)
+
+  // Small rating effect (requested): ~±5% across rating range.
+  // You can tighten/loosen this without changing the rest of the sim.
+  const RATING_SMALL_RANGE = 0.1 // total spread (e.g., 0.95..1.05 => 10% range)
+  const ratingMulSmall = useCallback(
+    (effRating: number) => {
+      // effRating nominal range 0.5..5
+      const t = Math.max(0, Math.min(1, (effRating - 0.5) / 4.5))
+      const half = RATING_SMALL_RANGE / 2
+      return 1 - half + t * RATING_SMALL_RANGE
+    },
+    [RATING_SMALL_RANGE],
+  )
 
   const TUNE = useMemo(() => {
     return {
       baseSpeed: 3.2,
-      speedVariance: variance,
+      // IMPORTANT: no random variance here for hosted races; per-driver variation is fixed from seed (driver.driverVariation).
+      // This aligns with your "variation fixed" requirement.
+      speedVariance: 0.0,
 
       accelRate: 3.5,
       accelOnStraights: 2.2,
@@ -275,15 +396,15 @@ export function useTrackCars({
       maxPushPerIterPx: 3.5,
       tangentPushCapPx: 0.35,
 
-      // neighbor broadphase: K ahead + K behind (implemented uniquely, no double-pairs)
       collideNeighbors: 3,
 
       packWindowFrac: 0.16,
       packJitter: 0.0,
 
-      maxLap: 9999,
+      // Hosted race laps (finish at start of next lap)
+      maxLap: (race?.config?.laps ?? 3) + 1,
 
-      startWaitTime: 2.0,
+      startWaitTime: 1.0,
       maxOvertakeTime: 12.0,
 
       insideCornerOvertakeMul: 0.92,
@@ -292,10 +413,9 @@ export function useTrackCars({
       slipstreamBoost: 1.04,
       slipstreamMinFrac: 0.2,
 
-      // publish to SharedValues at a capped rate (keeps UI smooth with many cars)
       publishHz: 30,
     }
-  }, [variance])
+  }, [race?.config?.laps])
 
   const computeDir = useCallback(
     (from: number, to: number): Dir => {
@@ -312,60 +432,6 @@ export function useTrackCars({
     [width],
   )
 
-  const [cars, setCars] = useState<CarAnim[]>([])
-  const nextIdRef = useRef(1)
-
-  const idsRef = useRef<number[]>([])
-  const sRef = useRef<number[]>([])
-  const vRef = useRef<number[]>([])
-  const baseRef = useRef<number[]>([])
-  const streakRef = useRef<number[]>([])
-
-  const laneRef = useRef<number[]>([])
-  const sideRef = useRef<number[]>([])
-  const phaseRef = useRef<OvertakePhase[]>([])
-  const holdRef = useRef<number[]>([])
-  const overtakeTimeRef = useRef<number[]>([])
-
-  const posXRef = useRef<number[]>([])
-  const posYRef = useRef<number[]>([])
-  const rotRef = useRef<number[]>([])
-
-  const targetIdRef = useRef<number[][]>([])
-  const beingOvertakenRef = useRef<number[]>([])
-
-  const lapsRef = useRef<number[]>([])
-
-  const runningRef = useRef(false)
-  const rafRef = useRef<number | null>(null)
-  const lastTsRef = useRef<number | null>(null)
-
-  const sigRef = useRef<string>('')
-
-  const startAtTsRef = useRef<number | null>(null)
-  const didLayoutRef = useRef(false)
-
-  const orderIdxRef = useRef<number[]>([])
-  const posInOrderRef = useRef<Int32Array | null>(null)
-  const idToIndexRef = useRef<Int32Array | null>(null)
-
-  const gapAheadRef = useRef<Float32Array | null>(null)
-  const desiredRef = useRef<Float32Array | null>(null)
-
-  const targetPxRef = useRef<Float32Array | null>(null)
-  const targetPyRef = useRef<Float32Array | null>(null)
-  const rotDegArrRef = useRef<Float32Array | null>(null)
-  const rotRadArrRef = useRef<Float32Array | null>(null)
-
-  const pxRef = useRef<Float32Array | null>(null)
-  const pyRef = useRef<Float32Array | null>(null)
-
-  const publishAccumRef = useRef(0)
-
-  const trackSig = useMemo(() => {
-    return `${width}|${cellPx}|${gapPx}|${padPx}|${safeCarCount}|${loop.join(',')}`
-  }, [width, cellPx, gapPx, padPx, safeCarCount, loop])
-
   const stop = useCallback(() => {
     runningRef.current = false
     lastTsRef.current = null
@@ -381,206 +447,6 @@ export function useTrackCars({
     const list = targetIdRef.current[i]
     return list && list.length ? list[list.length - 1] : 0
   }
-
-  const seedNewRaceRefs = useCallback(
-    (customSeed?: number) => {
-      const ids = idsRef.current
-      if (ids.length !== safeCarCount || safeCarCount === 0 || len === 0) return
-
-      const rand = mulberry32(customSeed ?? Date.now())
-      const packLen = Math.max(1, len * TUNE.packWindowFrac)
-      const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
-      const anchor = len - 1e-3
-
-      const carIndices = Array.from({ length: safeCarCount }, (_, i) => i)
-
-      // Sort by rating for reverse grid start (lowest rating starts first)
-      // If no ratings provided, shuffle randomly
-      const orderedIndices = carRatings
-        ? carIndices.slice().sort((a, b) => {
-            const ratingA = carRatings[a] ?? 0
-            const ratingB = carRatings[b] ?? 0
-            return ratingA - ratingB // ascending: lowest first
-          })
-        : shuffle(carIndices, rand)
-
-      for (let posIdx = 0; posIdx < safeCarCount; posIdx++) {
-        const i = orderedIndices[posIdx]
-        const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
-
-        // Apply rating multiplier if ratings are provided
-        // Increased impact: rating gives 0.7-1.3x speed multiplier (60% range)
-        // Formula: 0.7 + (rating / 5.0) * 0.6
-        // 5.0★ = 1.3x, 2.5★ = 1.0x, 0.5★ = 0.76x
-        // This makes rating ~3x more impactful than random variance (±10%)
-        const ratingMultiplier =
-          carRatings && carRatings[i] !== undefined ? 0.7 + (carRatings[i] / 5.0) * 0.6 : 1.0
-
-        const base = TUNE.baseSpeed * variance2 * ratingMultiplier
-
-        const jitter = (rand() * 2 - 1) * TUNE.packJitter
-        const s0 = (anchor - posIdx * spacing + jitter + len) % len
-
-        sRef.current[i] = s0
-        vRef.current[i] = base
-        baseRef.current[i] = base
-        streakRef.current[i] = 0
-
-        laneRef.current[i] = 0
-        sideRef.current[i] = 0
-        phaseRef.current[i] = 0
-        holdRef.current[i] = 0
-        overtakeTimeRef.current[i] = 0
-
-        posXRef.current[i] = 0
-        posYRef.current[i] = 0
-        rotRef.current[i] = 0
-
-        targetIdRef.current[i] = []
-        beingOvertakenRef.current[i] = 0
-
-        lapsRef.current[i] = 0
-
-        const carAnim = cars[i]
-        if (carAnim) {
-          carAnim.laps.value = 0
-          carAnim.progress.value = s0
-        }
-      }
-    },
-    [
-      TUNE.baseSpeed,
-      TUNE.packJitter,
-      TUNE.packWindowFrac,
-      TUNE.speedVariance,
-      cars,
-      len,
-      safeCarCount,
-      carRatings,
-    ],
-  )
-
-  const newRace = useCallback(
-    (customSeed?: number) => {
-      stop()
-      seedNewRaceRefs(customSeed)
-      didLayoutRef.current = false
-    },
-    [seedNewRaceRefs, stop],
-  )
-
-  useEffect(() => {
-    if (safeCarCount <= 0 || len <= 0) {
-      stop()
-      if (cars.length) setCars([])
-      sigRef.current = trackSig
-      return
-    }
-
-    if (
-      sigRef.current === trackSig &&
-      cars.length === safeCarCount &&
-      idsRef.current.length === safeCarCount
-    ) {
-      return
-    }
-
-    sigRef.current = trackSig
-    stop()
-
-    nextIdRef.current = 1
-    const created: CarAnim[] = []
-    const ids: number[] = []
-
-    const colorPalette = generateColorPalette(safeCarCount)
-
-    for (let i = 0; i < safeCarCount; i++) {
-      const id = nextIdRef.current++
-      ids.push(id)
-      created.push({
-        id,
-        x: makeMutable(0),
-        y: makeMutable(0),
-        rotDeg: makeMutable(0),
-        progress: makeMutable(0),
-        laps: makeMutable(0),
-        colorHex: colorPalette[id - 1],
-      })
-    }
-
-    idsRef.current = ids
-
-    sRef.current = new Array(safeCarCount).fill(0)
-    vRef.current = new Array(safeCarCount).fill(0)
-    baseRef.current = new Array(safeCarCount).fill(0)
-    streakRef.current = new Array(safeCarCount).fill(0)
-
-    laneRef.current = new Array(safeCarCount).fill(0)
-    sideRef.current = new Array(safeCarCount).fill(0)
-    phaseRef.current = new Array(safeCarCount).fill(0) as OvertakePhase[]
-    holdRef.current = new Array(safeCarCount).fill(0)
-    overtakeTimeRef.current = new Array(safeCarCount).fill(0)
-
-    posXRef.current = new Array(safeCarCount).fill(0)
-    posYRef.current = new Array(safeCarCount).fill(0)
-    rotRef.current = new Array(safeCarCount).fill(0)
-
-    targetIdRef.current = new Array(safeCarCount).fill(0).map(() => [])
-    beingOvertakenRef.current = new Array(safeCarCount).fill(0)
-
-    lapsRef.current = new Array(safeCarCount).fill(0)
-
-    orderIdxRef.current = new Array(safeCarCount)
-    for (let i = 0; i < safeCarCount; i++) orderIdxRef.current[i] = i
-    // initial true sort once
-    orderIdxRef.current.sort((a, b) => sRef.current[a] - sRef.current[b])
-
-    posInOrderRef.current = new Int32Array(safeCarCount)
-
-    idToIndexRef.current = new Int32Array(safeCarCount + 1)
-    for (let i = 0; i < safeCarCount + 1; i++) idToIndexRef.current[i] = -1
-
-    gapAheadRef.current = new Float32Array(safeCarCount)
-    desiredRef.current = new Float32Array(safeCarCount)
-
-    targetPxRef.current = new Float32Array(safeCarCount)
-    targetPyRef.current = new Float32Array(safeCarCount)
-    rotDegArrRef.current = new Float32Array(safeCarCount)
-    rotRadArrRef.current = new Float32Array(safeCarCount)
-
-    pxRef.current = new Float32Array(safeCarCount)
-    pyRef.current = new Float32Array(safeCarCount)
-
-    const rand = mulberry32(Date.now())
-    const packLen = Math.max(1, len * TUNE.packWindowFrac)
-    const spacing = safeCarCount > 1 ? packLen / (safeCarCount - 1) : 0
-    const anchor = len - 1e-3
-
-    for (let i = 0; i < safeCarCount; i++) {
-      const variance2 = 1 + (rand() * 2 - 1) * TUNE.speedVariance
-      const base = TUNE.baseSpeed * variance2
-      const jitter = (rand() * 2 - 1) * TUNE.packJitter
-      const s0 = (anchor - i * spacing + jitter + len) % len
-      sRef.current[i] = s0
-      vRef.current[i] = base
-      baseRef.current[i] = base
-
-      created[i].laps.value = 0
-      created[i].progress.value = s0
-    }
-
-    setCars(created)
-  }, [
-    trackSig,
-    safeCarCount,
-    len,
-    stop,
-    TUNE.baseSpeed,
-    TUNE.packJitter,
-    TUNE.packWindowFrac,
-    TUNE.speedVariance,
-    cars.length,
-  ])
 
   const applyLayoutOnce = useCallback(() => {
     const ids = idsRef.current
@@ -674,10 +540,165 @@ export function useTrackCars({
     }
   }, [cars, cellPx, gapPx, padPx, width, len, loop, computeDir, TUNE.laneOffset])
 
+  // Init / reset when race changes
+  useEffect(() => {
+    if (!race || race.config.id !== raceId || carCount <= 0 || len <= 0) {
+      stop()
+      setCars([])
+      setDrivers([])
+      setIsFinished(false)
+      idsRef.current = []
+      raceStartEpochRef.current = null
+      return
+    }
+
+    stop()
+    setIsFinished(false)
+
+    // Determine deterministic “race start epoch”
+    // Prefer store field if it exists; otherwise snapshot once now (but still deterministic for this client session).
+    // If you have race.config.startedAt, use it.
+    const startedAt = (race.config as any).startedAt as number | undefined
+    raceStartEpochRef.current = startedAt ?? raceStartEpochRef.current ?? Date.now()
+
+    const seed = seedFromString(race.config.seed)
+    const rand = mulberry32(seed)
+
+    const raceDrivers = createRaceDrivers(race, rand)
+    setDrivers(raceDrivers)
+
+    // Create car anims
+    const created: CarAnim[] = []
+    const colors = [
+      '#FF5252',
+      '#FF6E40',
+      '#FFAB40',
+      '#FFD740',
+      '#EEFF41',
+      '#69F0AE',
+      '#40C4FF',
+      '#448AFF',
+      '#7C4DFF',
+      '#E040FB',
+    ]
+
+    const ids: number[] = []
+    for (let i = 0; i < carCount; i++) {
+      const id = i + 1
+      ids.push(id)
+      created.push({
+        id,
+        x: makeMutable(0),
+        y: makeMutable(0),
+        rotDeg: makeMutable(0),
+        progress: makeMutable(0),
+        laps: makeMutable(0),
+        finished: makeMutable(false),
+        colorHex: colors[i % colors.length],
+      })
+    }
+    idsRef.current = ids
+
+    // Allocate refs (mirrors useTrackCars)
+    sRef.current = new Array(carCount).fill(0)
+    vRef.current = new Array(carCount).fill(0)
+    baseRef.current = new Array(carCount).fill(0)
+    streakRef.current = new Array(carCount).fill(0)
+
+    laneRef.current = new Array(carCount).fill(0)
+    sideRef.current = new Array(carCount).fill(0)
+    phaseRef.current = new Array(carCount).fill(0) as OvertakePhase[]
+    holdRef.current = new Array(carCount).fill(0)
+    overtakeTimeRef.current = new Array(carCount).fill(0)
+
+    posXRef.current = new Array(carCount).fill(0)
+    posYRef.current = new Array(carCount).fill(0)
+    rotRef.current = new Array(carCount).fill(0)
+
+    targetIdRef.current = new Array(carCount).fill(0).map(() => [])
+    beingOvertakenRef.current = new Array(carCount).fill(0)
+
+    lapsRef.current = new Array(carCount).fill(0)
+    finishedRef.current = new Array(carCount).fill(false)
+    finishOrderRef.current = new Array(carCount).fill(0)
+    finishCountRef.current = 0
+
+    orderIdxRef.current = new Array(carCount)
+    for (let i = 0; i < carCount; i++) orderIdxRef.current[i] = i
+    // initial sort once (by s, but s is seeded below)
+    posInOrderRef.current = new Int32Array(carCount)
+
+    idToIndexRef.current = new Int32Array(carCount + 1)
+    for (let i = 0; i < carCount + 1; i++) idToIndexRef.current[i] = -1
+
+    gapAheadRef.current = new Float32Array(carCount)
+    desiredRef.current = new Float32Array(carCount)
+
+    targetPxRef.current = new Float32Array(carCount)
+    targetPyRef.current = new Float32Array(carCount)
+    rotDegArrRef.current = new Float32Array(carCount)
+    rotRadArrRef.current = new Float32Array(carCount)
+
+    pxRef.current = new Float32Array(carCount)
+    pyRef.current = new Float32Array(carCount)
+
+    // Seed starting grid with random order (deterministic from seed)
+    const packLen = Math.max(1, len * TUNE.packWindowFrac)
+    const spacing = carCount > 1 ? packLen / (carCount - 1) : 0
+    const anchor = len - 1e-3
+
+    // Fisher-Yates shuffle with seeded RNG for deterministic random grid order
+    const orderedIndices = Array.from({ length: carCount }, (_, i) => i)
+    for (let i = orderedIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[orderedIndices[i], orderedIndices[j]] = [orderedIndices[j], orderedIndices[i]]
+    }
+
+    for (let posIdx = 0; posIdx < carCount; posIdx++) {
+      const i = orderedIndices[posIdx]
+      const d = raceDrivers[i]
+      const variationMul = 1 + (d?.driverVariation ?? 0) // fixed per race seed
+      const ratingMul = ratingMulSmall(d?.effectiveRating ?? 2.5) // small rating impact
+
+      const base = TUNE.baseSpeed * variationMul * ratingMul
+
+      const s0 = (anchor - posIdx * spacing + len) % len
+      sRef.current[i] = s0
+      vRef.current[i] = base
+      baseRef.current[i] = base
+      streakRef.current[i] = 0
+
+      laneRef.current[i] = 0
+      sideRef.current[i] = 0
+      phaseRef.current[i] = 0
+      holdRef.current[i] = 0
+      overtakeTimeRef.current[i] = 0
+
+      posXRef.current[i] = 0
+      posYRef.current[i] = 0
+      rotRef.current[i] = 0
+
+      targetIdRef.current[i] = []
+      beingOvertakenRef.current[i] = 0
+
+      lapsRef.current[i] = 0
+
+      created[i].laps.value = 0
+      created[i].progress.value = s0
+    }
+
+    // Sort orderIdx by initial s
+    orderIdxRef.current.sort((a, b) => sRef.current[a] - sRef.current[b])
+
+    didLayoutRef.current = false
+    setCars(created)
+  }, [race, raceId, carCount, len, stop, TUNE.baseSpeed, TUNE.packWindowFrac, ratingMulSmall])
+
   const start = useCallback(() => {
     if (runningRef.current) return
-    if (len === 0 || safeCarCount === 0) return
-    if (cars.length !== safeCarCount || idsRef.current.length !== safeCarCount) return
+    if (!race || race.config.id !== raceId) return
+    if (len === 0 || carCount === 0) return
+    if (cars.length !== carCount || idsRef.current.length !== carCount) return
 
     const gapAheadByI = gapAheadRef.current
     const desired = desiredRef.current
@@ -702,7 +723,7 @@ export function useTrackCars({
       !py ||
       !posInOrder ||
       !idToIndex ||
-      orderIdx.length !== safeCarCount
+      orderIdx.length !== carCount
     ) {
       return
     }
@@ -731,8 +752,6 @@ export function useTrackCars({
       }
     }
 
-    // Unique neighbor pairs: for each order position p, we check ahead only.
-    // This yields a symmetric "K ahead + K behind" coverage without duplicates.
     const iterateNeighborPairsUnique = (
       n: number,
       K: number,
@@ -753,6 +772,14 @@ export function useTrackCars({
 
     const s0: V2 = { x: 0, y: 0 }
     const e0: V2 = { x: 0, y: 0 }
+
+    // deterministic “race now” uses raceStartEpochRef + elapsed since startAtTs
+    const getRaceNowEpochMs = (ts: number) => {
+      const startEpoch = raceStartEpochRef.current ?? Date.now()
+      const startAt = startAtTsRef.current ?? ts
+      const elapsed = Math.max(0, ts - startAt)
+      return startEpoch + elapsed
+    }
 
     const tick = (ts: number) => {
       if (!runningRef.current) return
@@ -803,6 +830,7 @@ export function useTrackCars({
         if (id >= 0 && id < idToIndex.length) idToIndex[id] = i
       }
 
+      // overtake timeout tracking (same as useTrackCars)
       for (let i = 0; i < ids.length; i++) {
         if (phaseArr[i] === 1 || phaseArr[i] === 2 || phaseArr[i] === 3) {
           otArr[i] = (otArr[i] ?? 0) + dt
@@ -816,7 +844,7 @@ export function useTrackCars({
         }
       }
 
-      // keep stable order without O(n log n) sort
+      // stable order update
       fixOrderBySwaps(orderIdx, sArr)
       for (let p = 0; p < orderIdx.length; p++) posInOrder[orderIdx[p]] = p
 
@@ -877,6 +905,7 @@ export function useTrackCars({
         return 0
       }
 
+      // start overtake attempts (same as useTrackCars)
       for (let k = 0; k < orderIdx.length; k++) {
         const leaderI = orderIdx[k]
         const followerI = orderIdx[(k - 1 + orderIdx.length) % orderIdx.length]
@@ -901,7 +930,15 @@ export function useTrackCars({
         }
       }
 
+      // contract expiry: deterministic check against race-time
+      const raceNow = getRaceNowEpochMs(ts)
+
       for (let i = 0; i < sArr.length; i++) {
+        // Skip movement for cars that have finished
+        if (finishedRef.current[i]) {
+          continue
+        }
+
         const s = ((sArr[i] % len) + len) % len
         const seg = Math.floor(s)
         const frac = s - seg
@@ -945,6 +982,7 @@ export function useTrackCars({
           gapAheadByI[i] < TUNE.slipstreamWindow &&
           !overtakingNow
 
+        // base target speed
         let target = baseArr[i]
         target *= 1 + (TUNE.accelOnStraights - 1) * streakFactor
         if (cornerNow) target *= TUNE.cornerMul
@@ -952,6 +990,13 @@ export function useTrackCars({
         if (overtakingNow) target *= TUNE.overtakeBoost
         if (insideOvertakeCorner) target *= TUNE.insideCornerOvertakeMul
         if (slipstream) target *= TUNE.slipstreamBoost
+
+        // Contract expiry behavior (deterministic):
+        // If a MY TEAM driver expires mid-race, apply penalty to target (doesn't break sim).
+        const d = drivers[i]
+        if (d?.isMyTeam && d.contractExpiresAt && raceNow > d.contractExpiresAt) {
+          target *= 0.5
+        }
 
         const maxV = baseArr[i] * TUNE.maxMul
         const minV = baseArr[i] * TUNE.minMul
@@ -978,6 +1023,21 @@ export function useTrackCars({
           }
         }
 
+        // Check if car just finished
+        const currentLaps = lapsRef.current[i] ?? 0
+        if (currentLaps >= TUNE.maxLap && !finishedRef.current[i]) {
+          finishedRef.current[i] = true
+          finishCountRef.current++
+          finishOrderRef.current[i] = finishCountRef.current
+          // Mark car as finished (will be hidden from track)
+          const carAnim = cars[i]
+          if (carAnim) {
+            carAnim.finished.value = true
+          }
+          // Stop the car at the finish line
+          vArr[i] = 0
+        }
+
         ns %= len
         if (ns < 0) ns += len
         sArr[i] = ns
@@ -989,6 +1049,7 @@ export function useTrackCars({
           carAnim.progress.value = lp * len + ns
         }
 
+        // overtake state machine (same as useTrackCars)
         if (phaseArr[i] !== 0) {
           const activeTargetId = getActiveTarget(i)
           const ahead = getNextAhead(i)
@@ -1046,6 +1107,7 @@ export function useTrackCars({
         }
       }
 
+      // desired lane
       for (let i = 0; i < ids.length; i++) {
         desired[i] = phaseArr[i] === 1 || phaseArr[i] === 2 ? sideArr[i] : 0
       }
@@ -1065,6 +1127,7 @@ export function useTrackCars({
         return true
       }
 
+      // resolve lane conflicts
       for (let iter = 0; iter < TUNE.resolveIters; iter++) {
         for (let k = 0; k < orderIdx.length; k++) {
           const leaderI = orderIdx[k]
@@ -1099,12 +1162,14 @@ export function useTrackCars({
         }
       }
 
+      // lane ease
       for (let i = 0; i < ids.length; i++) {
         const targetLane = snapLane(desired[i])
         const ease = targetLane === 0 ? TUNE.laneEaseBack : TUNE.laneEaseOut
         laneArr[i] = laneArr[i] + (targetLane - laneArr[i]) * (1 - Math.exp(-ease * dt))
       }
 
+      // target positions
       for (let i = 0; i < sArr.length; i++) {
         const ns = ((sArr[i] % len) + len) % len
         const seg2 = Math.floor(ns)
@@ -1177,6 +1242,7 @@ export function useTrackCars({
         py[i] = curY + (targetPy[i] - curY) * followAlpha
       }
 
+      // collisions (same as useTrackCars)
       const slop = TUNE.collideSlopPx
       const hx = halfW + slop
       const hy = halfH + slop
@@ -1275,7 +1341,7 @@ export function useTrackCars({
         rotRef.current[i] = rotDegArr[i]
       }
 
-      // publish to UI at capped rate (smooth + reduces bridge work with lots of cars)
+      // publish throttle
       publishAccumRef.current += dt
       const publishEvery = 1 / Math.max(1, TUNE.publishHz)
       const doPublish = publishAccumRef.current >= publishEvery
@@ -1292,29 +1358,77 @@ export function useTrackCars({
         }
       }
 
+      // finish condition: all cars have completed their laps
+      const allFinished =
+        finishedRef.current.length > 0 && finishedRef.current.every((finished) => finished)
+
+      if (allFinished && !isFinished) {
+        setIsFinished(true)
+
+        // Build results using finish order
+        const results: HostedRaceResultRow[] = drivers.map((driver, i) => {
+          const lp = lapsRef.current[i] ?? 0
+          const prog = lp * len + (((sArr[i] % len) + len) % len)
+          return {
+            driverId: driver.driverId,
+            driverName: driver.driverName,
+            driverNumber: driver.driverNumber,
+            position: finishOrderRef.current[i] || 0,
+            laps: lp,
+            finalProgress: prog,
+            isMyTeam: driver.isMyTeam,
+          }
+        })
+
+        // Sort by finish order (position already assigned)
+        results.sort((a, b) => a.position - b.position)
+
+        const competitorMean = race.config.competitorMean ?? 2.0
+        const fieldSize = race.config.fieldSize ?? carCount
+
+        // Calculate prestige for My Team drivers
+        results.forEach((r) => {
+          if (r.isMyTeam) {
+            const prestige = calculatePrestigeAward(r.position, competitorMean, fieldSize)
+            if (prestige > 0) r.prestigeAwarded = prestige
+          }
+        })
+
+        finishRace(results)
+        onFinished?.(results)
+        stop()
+        return
+      }
+
       rafRef.current = requestAnimationFrame(tick)
     }
 
     rafRef.current = requestAnimationFrame(tick)
   }, [
-    cars,
-    cellPx,
-    computeDir,
-    gapPx,
+    race,
+    raceId,
     len,
-    loop,
+    carCount,
+    cars,
+    drivers,
+    cellPx,
+    gapPx,
     padPx,
-    safeCarCount,
-    TUNE,
     width,
     carWFrac,
     carHFrac,
     carWPx,
     carHPx,
+    computeDir,
     applyLayoutOnce,
+    finishRace,
+    onFinished,
+    stop,
+    TUNE,
+    isFinished,
   ])
 
   useEffect(() => stop, [stop])
 
-  return { cars, start, stop, newRace }
+  return { cars, drivers, start, stop, isFinished }
 }
