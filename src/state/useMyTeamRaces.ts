@@ -62,6 +62,7 @@ export type HostedRace = {
   drivers: RaceDriverSnapshot[] // all drivers in the race (My Team + AI)
   results?: HostedRaceResultRow[] // final results, set when state becomes 'finished'
   prestigeAwarded: boolean // true if prestige has been awarded for this race
+  isOnline?: boolean // true if this is an online multiplayer race (runs independently, no auto-cancel)
 }
 
 /**
@@ -82,6 +83,7 @@ type MyTeamRacesState = {
   createRace: (
     config: Omit<HostedRaceConfig, 'id' | 'createdAt'>,
   ) => { ok: true; race: HostedRace } | { ok: false; reason: string }
+  setActiveRace: (race: HostedRace) => void
   startRace: () => { ok: true } | { ok: false; reason: string }
   finishRace: (results: HostedRaceResultRow[]) => void
   cancelRace: () => void
@@ -100,6 +102,7 @@ type MyTeamRacesData = Pick<MyTeamRacesState, 'activeRace' | 'history' | 'compet
 type MyTeamRacesActions = Pick<
   MyTeamRacesState,
   | 'createRace'
+  | 'setActiveRace'
   | 'startRace'
   | 'finishRace'
   | 'cancelRace'
@@ -187,6 +190,7 @@ function createInitialState(): MyTeamRacesData {
 
 type Action =
   | { type: 'CREATE_RACE'; race: HostedRace }
+  | { type: 'SET_ACTIVE_RACE'; race: HostedRace }
   | { type: 'START_RACE'; startedAt: number }
   | { type: 'FINISH_RACE'; results: HostedRaceResultRow[]; finishedAt: number; adjustment: number }
   | { type: 'CANCEL_RACE' }
@@ -197,6 +201,13 @@ type Action =
 function reducer(state: MyTeamRacesData, action: Action): MyTeamRacesData {
   switch (action.type) {
     case 'CREATE_RACE': {
+      return {
+        ...state,
+        activeRace: action.race,
+      }
+    }
+
+    case 'SET_ACTIVE_RACE': {
       return {
         ...state,
         activeRace: action.race,
@@ -336,6 +347,10 @@ function createActions(
       return { ok: true, race }
     },
 
+    setActiveRace: (race: HostedRace) => {
+      dispatch({ type: 'SET_ACTIVE_RACE', race })
+    },
+
     startRace: () => {
       const state = getState()
 
@@ -420,16 +435,24 @@ function createActions(
       const race = getState().activeRace
       if (!race) return null
 
-      // Auto-cleanup: if race is running without startedAt or for more than 70 seconds, cancel it
-      if (race.state === 'running') {
+      // Auto-cleanup: if race is running without startedAt or for more than timeout, cancel it
+      // Skip auto-cleanup for online races - they run independently on each client
+      if (race.state === 'running' && !race.isOnline) {
         if (!race.startedAt) {
           // Race is running but has no start time (invalid state)
           dispatch({ type: 'CANCEL_RACE' })
           return null
         }
         const elapsed = (Date.now() - race.startedAt) / 1000
-        if (elapsed > 70) {
+        // Longer timeout for races (was 70s, now 120s)
+        if (elapsed > 120) {
           // Race expired, cancel it
+          console.log(
+            '[MyTeamRaces] Auto-canceling expired race:',
+            race.config.id,
+            'elapsed:',
+            elapsed,
+          )
           dispatch({ type: 'CANCEL_RACE' })
           return null
         }

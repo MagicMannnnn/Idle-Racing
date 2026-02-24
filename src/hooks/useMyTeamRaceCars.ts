@@ -226,6 +226,18 @@ function generateAIDrivers(
 }
 
 function createRaceDrivers(race: HostedRace, rand: () => number): RaceDriverSnapshot[] {
+  // If race already has drivers (e.g., from online race), use those but add variation
+  if (race.drivers && race.drivers.length > 0) {
+    console.log('[useMyTeamRaceCars] Using existing drivers from race:', race.drivers.length)
+    // Add deterministic variation to each driver based on race seed
+    return race.drivers.map((driver) => ({
+      ...driver,
+      driverVariation: (rand() * 2 - 1) * 0.1, // Generate variation from race seed
+    }))
+  }
+
+  console.log('[useMyTeamRaceCars] Creating drivers from team state')
+  // Otherwise, create drivers from team state (for local AI races)
   const teamState = useTeam.getState()
   const drivers: RaceDriverSnapshot[] = []
   const usedNumbers = new Set<number>()
@@ -262,6 +274,18 @@ function createRaceDrivers(race: HostedRace, rand: () => number): RaceDriverSnap
     drivers.push(...generateAIDrivers(rand, aiCount, race.config.competitorMean, usedNumbers))
 
   return drivers
+}
+
+// --- ensure race simulation continues when tab is inactive ---
+// Patch requestAnimationFrame to use setTimeout if document.hidden
+if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+  const origRAF = window.requestAnimationFrame
+  window.requestAnimationFrame = function (cb) {
+    if (typeof document !== 'undefined' && document.hidden) {
+      return window.setTimeout(() => cb(performance.now()), 16)
+    }
+    return origRAF(cb)
+  }
 }
 
 // ---------- main hook ----------
@@ -355,6 +379,15 @@ export function useMyTeamRaceCars({
   )
 
   const TUNE = useMemo(() => {
+    const maxLap = (race?.config?.laps ?? 3) + 1
+    console.log(
+      '[useMyTeamRaceCars] TUNE initialized - race laps:',
+      race?.config?.laps,
+      'maxLap:',
+      maxLap,
+      'carCount:',
+      carCount,
+    )
     return {
       baseSpeed: 3.2,
       // IMPORTANT: no random variance here for hosted races; per-driver variation is fixed from seed (driver.driverVariation).
@@ -398,11 +431,13 @@ export function useMyTeamRaceCars({
 
       collideNeighbors: 3,
 
-      packWindowFrac: 0.16,
+      // For online races with few drivers, use tighter grid spacing
+      // For 2-5 drivers: 0.05 (5% of track), for 6-10: 0.08, for 11+: 0.16
+      packWindowFrac: race?.isOnline ? (carCount <= 5 ? 0.05 : carCount <= 10 ? 0.08 : 0.16) : 0.16,
       packJitter: 0.0,
 
       // Hosted race laps (finish at start of next lap)
-      maxLap: (race?.config?.laps ?? 3) + 1,
+      maxLap,
 
       startWaitTime: 1.0,
       maxOvertakeTime: 12.0,
@@ -415,7 +450,7 @@ export function useMyTeamRaceCars({
 
       publishHz: 30,
     }
-  }, [race?.config?.laps])
+  }, [race?.config?.laps, race?.isOnline, carCount])
 
   const computeDir = useCallback(
     (from: number, to: number): Dir => {
@@ -542,7 +577,16 @@ export function useMyTeamRaceCars({
 
   // Init / reset when race changes
   useEffect(() => {
+    console.log(
+      '[useMyTeamRaceCars] useEffect triggered. Race:',
+      race?.config.id,
+      'carCount:',
+      carCount,
+      'len:',
+      len,
+    )
     if (!race || race.config.id !== raceId || carCount <= 0 || len <= 0) {
+      console.log('[useMyTeamRaceCars] Skipping init - invalid state')
       stop()
       setCars([])
       setDrivers([])
@@ -552,6 +596,7 @@ export function useMyTeamRaceCars({
       return
     }
 
+    console.log('[useMyTeamRaceCars] Initializing race:', raceId)
     stop()
     setIsFinished(false)
 
@@ -565,6 +610,7 @@ export function useMyTeamRaceCars({
     const rand = mulberry32(seed)
 
     const raceDrivers = createRaceDrivers(race, rand)
+    console.log('[useMyTeamRaceCars] Race drivers created:', raceDrivers.length, raceDrivers)
     setDrivers(raceDrivers)
 
     // Create car anims
@@ -597,6 +643,7 @@ export function useMyTeamRaceCars({
         colorHex: colors[i % colors.length],
       })
     }
+    console.log('[useMyTeamRaceCars] Created cars:', created.length)
     idsRef.current = ids
 
     // Allocate refs (mirrors useTrackCars)
@@ -692,7 +739,17 @@ export function useMyTeamRaceCars({
 
     didLayoutRef.current = false
     setCars(created)
-  }, [race, raceId, carCount, len, stop, TUNE.baseSpeed, TUNE.packWindowFrac, ratingMulSmall])
+  }, [
+    race,
+    raceId,
+    carCount,
+    len,
+    stop,
+    TUNE.baseSpeed,
+    TUNE.packWindowFrac,
+    race?.isOnline,
+    ratingMulSmall,
+  ])
 
   const start = useCallback(() => {
     if (runningRef.current) return
@@ -1029,6 +1086,10 @@ export function useMyTeamRaceCars({
           finishedRef.current[i] = true
           finishCountRef.current++
           finishOrderRef.current[i] = finishCountRef.current
+          const driverName = drivers[i]?.driverName || `Car ${i + 1}`
+          console.log(
+            `[useMyTeamRaceCars] ${driverName} finished! Position: ${finishCountRef.current}/${carCount}`,
+          )
           // Mark car as finished (will be hidden from track)
           const carAnim = cars[i]
           if (carAnim) {
@@ -1359,10 +1420,14 @@ export function useMyTeamRaceCars({
       }
 
       // finish condition: all cars have completed their laps
+      // Ensure we have the correct number of cars and that ALL have finished
       const allFinished =
-        finishedRef.current.length > 0 && finishedRef.current.every((finished) => finished)
+        finishedRef.current.length === carCount &&
+        finishedRef.current.length > 0 &&
+        finishedRef.current.every((finished) => finished)
 
       if (allFinished && !isFinished) {
+        console.log('[useMyTeamRaceCars] ALL CARS FINISHED - triggering race end')
         setIsFinished(true)
 
         // Build results using finish order
@@ -1393,6 +1458,12 @@ export function useMyTeamRaceCars({
             if (prestige > 0) r.prestigeAwarded = prestige
           }
         })
+
+        const isOnline = race.isOnline ?? false
+        console.log(
+          `[useMyTeamRaceCars] Race finished! Type: ${isOnline ? 'ONLINE' : 'LOCAL'}, Results:`,
+          results.length,
+        )
 
         finishRace(results)
         onFinished?.(results)

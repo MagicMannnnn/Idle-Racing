@@ -6,7 +6,6 @@ import { useMyTeamRaceCars } from '@hooks/useMyTeamRaceCars'
 import { useIsFocused } from '@react-navigation/native'
 import type { HostedRaceResultRow } from '@state/useMyTeamRaces'
 import { useMyTeamRaces } from '@state/useMyTeamRaces'
-import { useTrackMaps } from '@state/useTrackMaps'
 import {
   addDeg,
   angleFromDelta,
@@ -36,6 +35,7 @@ type Props = {
   driverIds: string[] // My Team driver IDs to race
   initialGridSize?: number
   onFinished?: (results: HostedRaceResultRow[]) => void
+  grid?: { size: number; cells: string[] }
 }
 
 const GRID_GAP = 1
@@ -266,12 +266,21 @@ export function HostedRaceTrackView({
   driverIds,
   initialGridSize = 5,
   onFinished,
+  grid: overrideGrid,
 }: Props) {
   const renderStartTime = useRef(performance.now())
   const renderCount = useRef(0)
 
-  const ensure = useTrackMaps((s: any) => s.ensure)
-  const grid = useTrackMaps((s: any) => s.get(trackId))
+  // Only use the provided grid if present; never fallback
+  const grid = overrideGrid || null
+  // Log grid for verification
+  React.useEffect(() => {
+    if (grid) {
+      console.log('[HostedRaceTrackView] Using grid from server:', grid)
+    } else {
+      console.warn('[HostedRaceTrackView] No grid provided!')
+    }
+  }, [grid])
 
   const getActiveRace = useMyTeamRaces((s: any) => s.getActiveRace)
 
@@ -291,9 +300,7 @@ export function HostedRaceTrackView({
 
   const [leaderId, setLeaderId] = useState<number | null>(null)
 
-  useEffect(() => {
-    ensure(trackId, initialGridSize)
-  }, [ensure, trackId, initialGridSize])
+  // Do not call ensure or useTrackMaps if grid is provided
 
   const mapSize = grid?.size ?? initialGridSize
   const cells = grid?.cells ?? []
@@ -365,9 +372,20 @@ export function HostedRaceTrackView({
 
   // Determine if we should show cars and run simulation
   useEffect(() => {
-    const hasDrivers = driverIds.length > 0
+    // Check if we have drivers - either from driverIds (AI race) or from race.drivers (online race)
+    const hasDrivers =
+      driverIds.length > 0 || (activeRace?.drivers && activeRace.drivers.length > 0)
     const isRunning = activeRace?.state === 'running'
     const raceFinished = activeRace?.state === 'finished' || isFinished
+
+    console.log(
+      '[HostedRaceTrackView] hasDrivers:',
+      hasDrivers,
+      'isRunning:',
+      isRunning,
+      'raceFinished:',
+      raceFinished,
+    )
 
     // Show cars if we have drivers and race is running or just finished
     const shouldShow = hasDrivers && (isRunning || raceFinished)
@@ -380,7 +398,7 @@ export function HostedRaceTrackView({
     setEntertainmentValue(0.5)
 
     if (shouldRun) needsNewRaceRef.current = true
-  }, [driverIds.length, activeRace?.state, isFinished])
+  }, [driverIds.length, activeRace?.state, activeRace?.drivers, isFinished])
 
   // hard stop when not focused or not running sim
   useEffect(() => {
@@ -629,11 +647,13 @@ export function HostedRaceTrackView({
   }, [cells, mapSize, trackKerbsByIndex])
 
   // Filter out finished cars from track display, but keep them for leaderboard
+  const hasDriversInRace =
+    driverIds.length > 0 || (activeRace?.drivers && activeRace.drivers.length > 0)
   const displayCarsOnTrack = useMemo(
-    () => (driverIds.length > 0 ? cars.filter((c) => !c.finished.value) : []),
-    [cars, driverIds.length],
+    () => (hasDriversInRace ? cars.filter((c) => !c.finished.value) : []),
+    [cars, hasDriversInRace],
   )
-  const displayCars = driverIds.length > 0 ? cars : []
+  const displayCars = hasDriversInRace ? cars : []
 
   // Format lap display
   const lapDisplay = useMemo(() => {
@@ -807,8 +827,8 @@ export function HostedRaceTrackView({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  scroll: { flex: 1 },
+  safe: { flex: 1, backgroundColor: '#f7f7fa' },
+  scroll: { flex: 1, backgroundColor: '#f7f7fa' },
 
   header: {
     flexDirection: 'row',
@@ -816,9 +836,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1a1f27',
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
   headerCenter: {
     flex: 1,
@@ -827,7 +847,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: '#222',
   },
   timerBox: {
     flexDirection: 'row',
