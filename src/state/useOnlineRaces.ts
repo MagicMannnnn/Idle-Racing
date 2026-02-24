@@ -340,7 +340,18 @@ export const useOnlineRaces = create<OnlineRacesState>((set, get) => ({
       if (response.ok) {
         set({ error: null })
       } else {
-        set({ error: response.error || 'Failed to join race' })
+        // If race not found, reset local race state so user isn't blocked
+        if (response.error && response.error.toLowerCase().includes('race not found')) {
+          try {
+            const myTeamRacesState = require('./useMyTeamRaces').useMyTeamRaces.getState()
+            myTeamRacesState.reset()
+          } catch (e) {
+            // ignore
+          }
+          set({ error: null }) // Clear error after reset so UI is unblocked
+        } else {
+          set({ error: response.error || 'Failed to join race' })
+        }
       }
       callback?.(response)
     })

@@ -35,11 +35,29 @@ function HostedRaceView() {
 
   const isFinished = race?.state === 'finished'
 
+  const quitRace = () => {
+    // Clear all race data
+    try {
+      require('@state/useMyTeamRaces').useMyTeamRaces.getState().reset()
+    } catch {}
+    try {
+      require('@state/useOnlineRaces').useOnlineRaces.getState().reset()
+    } catch {}
+    router.push('/team')
+  }
+
   if (!race || !track) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.container}>
           <Text style={styles.title}>Race not found</Text>
+          <Pressable
+            onPress={quitRace}
+            style={({ pressed }) => [styles.quitButton, pressed && styles.quitButtonPressed]}
+          >
+            <Ionicons name="exit" size={20} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.quitButtonText}>Quit Race</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     )
@@ -48,11 +66,24 @@ function HostedRaceView() {
   // Show live race view
   if (!isFinished) {
     return (
-      <HostedRaceTrackView
-        trackId={race.config.trackId}
-        driverIds={race.config.driverIds}
-        onFinished={setResults}
-      />
+      <SafeAreaView style={styles.safe}>
+        <View style={{ flex: 1 }}>
+          <HostedRaceTrackView
+            trackId={race.config.trackId}
+            driverIds={race.config.driverIds}
+            onFinished={setResults}
+          />
+          <View style={{ position: 'absolute', top: 16, right: 16 }}>
+            <Pressable
+              onPress={quitRace}
+              style={({ pressed }) => [styles.quitButton, pressed && styles.quitButtonPressed]}
+            >
+              <Ionicons name="exit" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.quitButtonText}>Quit Race</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
     )
   }
 
@@ -134,6 +165,15 @@ function HostedRaceView() {
                 </View>
               ))}
           </ScrollView>
+          <View style={{ marginTop: 16, alignItems: 'center' }}>
+            <Pressable
+              onPress={quitRace}
+              style={({ pressed }) => [styles.quitButton, pressed && styles.quitButtonPressed]}
+            >
+              <Ionicons name="exit" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.quitButtonText}>Quit Race</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -170,6 +210,26 @@ export default function RaceTab() {
 }
 
 const styles = StyleSheet.create({
+  quitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#E53935',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: '#E53935',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  quitButtonPressed: { opacity: 0.8 },
+  quitButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+  },
   safe: { flex: 1, backgroundColor: '#0B0F14' },
   header: {
     flexDirection: 'row',
