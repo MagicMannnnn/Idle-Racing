@@ -61,5 +61,9 @@ module.exports = ({ config }) => {
       ],
       'expo-font',
     ],
+    extra: {
+      EXPO_PUBLIC_RACE_SERVER_URL: process.env.EXPO_PUBLIC_RACE_SERVER_URL,
+      EXPO_PUBLIC_ADD_UNIT_ID: process.env.EXPO_PUBLIC_ADD_UNIT_ID,
+    },
   }
 }

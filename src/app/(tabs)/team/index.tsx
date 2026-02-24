@@ -1,4 +1,6 @@
+import { HostOnlineRaceModal } from '@components/team/HostOnlineRaceModal'
 import { HostRaceModal } from '@components/team/HostRaceModal'
+import { JoinOnlineRaceModal } from '@components/team/JoinOnlineRaceModal'
 import { Ionicons } from '@expo/vector-icons'
 import { useTeam } from '@state/useTeam'
 import { router } from 'expo-router'
@@ -66,6 +68,8 @@ export default function TeamIndex() {
   const tick = useTeam((s: any) => s.tick)
 
   const [hostRaceModalVisible, setHostRaceModalVisible] = useState(false)
+  const [hostOnlineRaceModalVisible, setHostOnlineRaceModalVisible] = useState(false)
+  const [joinOnlineRaceModalVisible, setJoinOnlineRaceModalVisible] = useState(false)
 
   // Tick every 100ms to update progress bars
   useEffect(() => {
@@ -151,11 +155,51 @@ export default function TeamIndex() {
           </View>
           <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" />
         </Pressable>
+
+        {/* Host Online Race Button */}
+        <Pressable
+          onPress={() => setHostOnlineRaceModalVisible(true)}
+          style={({ pressed }) => [
+            styles.hostOnlineRaceButton,
+            pressed && styles.hostOnlineRaceButtonPressed,
+          ]}
+        >
+          <Ionicons name="globe" size={24} color="#fff" />
+          <View style={styles.hostRaceTextContainer}>
+            <Text style={styles.hostRaceTitle}>Host Online Race</Text>
+            <Text style={styles.hostRaceSubtitle}>Race against other players online</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" />
+        </Pressable>
+
+        {/* Join Online Race Button */}
+        <Pressable
+          onPress={() => setJoinOnlineRaceModalVisible(true)}
+          style={({ pressed }) => [
+            styles.joinOnlineRaceButton,
+            pressed && styles.joinOnlineRaceButtonPressed,
+          ]}
+        >
+          <Ionicons name="enter" size={24} color="#fff" />
+          <View style={styles.hostRaceTextContainer}>
+            <Text style={styles.hostRaceTitle}>Join Online Race</Text>
+            <Text style={styles.hostRaceSubtitle}>Join a race hosted by another player</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" />
+        </Pressable>
       </ScrollView>
 
       <HostRaceModal
         visible={hostRaceModalVisible}
         onClose={() => setHostRaceModalVisible(false)}
+      />
+      <HostOnlineRaceModal
+        visible={hostOnlineRaceModalVisible}
+        onClose={() => setHostOnlineRaceModalVisible(false)}
+      />
+      <JoinOnlineRaceModal
+        visible={joinOnlineRaceModalVisible}
+        onClose={() => setJoinOnlineRaceModalVisible(false)}
       />
     </SafeAreaView>
   )
@@ -285,5 +329,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.85)',
+  },
+  hostOnlineRaceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2196F3',
+    borderRadius: 18,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  hostOnlineRaceButtonPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
+  },
+  joinOnlineRaceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF9800',
+    borderRadius: 18,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  joinOnlineRaceButtonPressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.9,
   },
 })
