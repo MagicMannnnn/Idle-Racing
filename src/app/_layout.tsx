@@ -4,7 +4,7 @@ import { useOnboarding } from '@state/useOnboarding'
 import { useFonts } from 'expo-font'
 import { router, SplashScreen, Stack } from 'expo-router'
 import { useEffect } from 'react'
-import { Pressable, Text } from 'react-native'
+import { Platform, Pressable, Text } from 'react-native'
 
 // Time simulation for development/testing
 if (__DEV__) {
@@ -49,6 +49,54 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync()
   }, [fontsLoaded])
+
+  // Inject CSS for persistent scrollbars on web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const style = document.createElement('style')
+      style.textContent = `
+        /* Force horizontal scrollbars to always show */
+        #hire-driver-carousel::-webkit-scrollbar {
+          height: 12px;
+        }
+        #hire-driver-carousel::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 6px;
+        }
+        #hire-driver-carousel::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.5);
+          border-radius: 6px;
+        }
+        #hire-driver-carousel::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.7);
+        }
+        
+        /* Force scrollbars for all horizontal ScrollViews */
+        [data-focusable="true"][style*="flex-direction: row"]::-webkit-scrollbar,
+        [style*="overflow-x: scroll"]::-webkit-scrollbar {
+          height: 10px;
+        }
+        [data-focusable="true"][style*="flex-direction: row"]::-webkit-scrollbar-track,
+        [style*="overflow-x: scroll"]::-webkit-scrollbar-track {
+          background: rgba(46, 46, 46, 0.3);
+          border-radius: 5px;
+        }
+        [data-focusable="true"][style*="flex-direction: row"]::-webkit-scrollbar-thumb,
+        [style*="overflow-x: scroll"]::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.5);
+          border-radius: 5px;
+        }
+        [data-focusable="true"][style*="flex-direction: row"]::-webkit-scrollbar-thumb:hover,
+        [style*="overflow-x: scroll"]::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.7);
+        }
+      `
+      document.head.appendChild(style)
+      return () => {
+        document.head.removeChild(style)
+      }
+    }
+  }, [])
 
   if (!hasHydrated || !fontsLoaded) return null
 

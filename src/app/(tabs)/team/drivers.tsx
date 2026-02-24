@@ -393,7 +393,20 @@ export default function DriversPage() {
               contentContainerStyle={styles.carouselContent}
               snapToInterval={Platform.OS === 'web' ? undefined : CARD_WIDTH}
               decelerationRate="fast"
-              style={Platform.OS === 'web' ? { maxWidth: '100%' } : undefined}
+              style={
+                Platform.OS === 'web'
+                  ? ({
+                      maxWidth: '100%',
+                      overflowX: 'scroll',
+                      overflowY: 'hidden',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: 'rgba(255,255,255,0.5) rgba(0,0,0,0.2)',
+                      WebkitOverflowScrolling: 'touch',
+                    } as any)
+                  : undefined
+              }
+              // @ts-ignore - web-only nativeID for CSS targeting
+              nativeID={Platform.OS === 'web' ? 'hire-driver-carousel' : undefined}
             >
               {driverOptions.map((option, idx) => {
                 const quote = quoteDriver(option.rating, option.contractLength)

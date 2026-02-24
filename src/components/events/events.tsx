@@ -260,7 +260,17 @@ export default function TrackEvents(props: { track: TrackLike }) {
         {/* Event Type Selector */}
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
+          showsHorizontalScrollIndicator={Platform.OS === 'web'}
+          style={
+            Platform.OS === 'web'
+              ? ({
+                  overflowX: 'scroll',
+                  overflowY: 'hidden',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(255,255,255,0.5) rgba(46,46,46,0.3)',
+                } as any)
+              : undefined
+          }
           contentContainerStyle={styles.stepRow}
         >
           {availableEvents.map((evt, i) => {
@@ -308,7 +318,17 @@ export default function TrackEvents(props: { track: TrackLike }) {
         {/* Duration Selector */}
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
+          showsHorizontalScrollIndicator={Platform.OS === 'web'}
+          style={
+            Platform.OS === 'web'
+              ? ({
+                  overflowX: 'scroll',
+                  overflowY: 'hidden',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(255,255,255,0.5) rgba(46,46,46,0.3)',
+                } as any)
+              : undefined
+          }
           contentContainerStyle={styles.stepRow}
         >
           {selectedEvent.durations.map((m, i) => {
