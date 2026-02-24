@@ -50,10 +50,10 @@ export function JoinOnlineRaceModal({ visible, onClose }: Props) {
 
   // Auto-close modal when race starts (navigation handled by socket listener)
   useEffect(() => {
-    if (currentRace?.started && joining) {
+    if (currentRace?.started) {
       handleClose()
     }
-  }, [currentRace?.started, joining])
+  }, [currentRace?.started])
 
   // Calculate car rating
   const carRating = useMemo(() => {
